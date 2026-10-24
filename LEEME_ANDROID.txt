@@ -39,3 +39,8 @@ NOTAS
 - Waze y Google Maps se abren con sus apps si estan instaladas.
 - Exportar KMZ lo guarda en Descargas (o lo envia por WhatsApp/correo con "Enviar").
 - Si cambias algo en la app web, ejecuta ./sync-web.sh para copiarlo a esta app.
+
+=== ACTUALIZAR SIN PERDER DATOS (desde la versión 2.1) ===
+El APK ahora se firma siempre con la misma llave (app/cajas.keystore). Instalar un APK nuevo encima del anterior lo ACTUALIZA y conserva todos los datos.
+Reglas: no borres cajas.keystore, no cambies applicationId y SUBE versionCode en app/build.gradle en cada versión (ahora 11).
+Solo la primera vez (pasar de un APK viejo a este) hay que desinstalar el anterior. ANTES de hacerlo, abre la app, espera la etiqueta "Sincronizado" y listo: al volver a entrar todo regresa del servidor.

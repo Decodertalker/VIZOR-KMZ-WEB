@@ -877,7 +877,7 @@
     const nEv = S.evals.length, pEv = S.evals.filter(e => e.estado !== 'hecha').length;
     const items = [
       ...(adm ? [['team', 'Administración', 'Usuarios y ubicación del equipo', 'admin'], ['clip', 'Asignaciones', 'Asignar evaluaciones y rutas a los técnicos', 'asig'], ['box', 'Datos de cajas y KMZ', 'Ver, agregar y eliminar lo que se sincroniza', 'datos']] : []),
-      ...(cu ? [['reset', 'Sincronizar ahora', SY.err ? 'Error: ' + SY.err : (SY.t ? 'Última vez ' + ago(SY.t) : 'Web y app comparten las mismas cajas'), 'sync']] : []),
+      ...(cu ? [['reset', 'Sincronización automática', SY.err ? 'Error: ' + SY.err + ' · toca para reintentar' : (SY.t ? 'Al día · última vez ' + ago(SY.t) : 'Web y app comparten los mismos datos'), 'sync']] : []),
       ...(cu ? [['user', 'Mi cuenta', cu.name + ' · ' + (cu.role === 'admin' ? 'Administrador' : 'Técnico'), 'acct']] : (Cloud.configured() ? [] : [['user', 'Conectar servidor', 'Activa usuarios, administrador y ubicación del equipo', 'srv']])),
       ['clip', isT ? 'Mis evaluaciones y ruta' : 'Evaluaciones técnicas', nEv ? nEv + ' órdenes · ' + pEv + ' pendientes' : (isT ? 'Aquí aparecen las que te asignen' : 'Carga un Excel con clientes y órdenes'), 'evals'],
       ...(isT ? [] : [['upload', 'Importar KMZ / KML', 'Suma o actualiza cajas desde otro archivo', 'imp'], ['download', 'Exportar KMZ', 'Todo con tus cambios, listo para Google Earth', 'exp']]),
@@ -887,7 +887,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Cajas GPON <small style="font-size:12px;color:var(--muted);font-weight:500">v2.0 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Cajas GPON <small style="font-size:12px;color:var(--muted);font-weight:500">v2.1 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {
@@ -1567,7 +1567,7 @@
     if (!Cloud.session()) showLogin('login'); else startSession();
   }
   function startSession() {
-    if (!sessionOn) { sessionOn = true; setInterval(() => cloudReport(true), 60000); setInterval(() => syncNow(), 60000); window.addEventListener('online', () => setTimeout(() => syncNow(), 1500)); }
+    if (!sessionOn) { sessionOn = true; setInterval(() => cloudReport(true), 60000); setInterval(() => syncNow(), 30000); document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(() => syncNow(), 600); }); window.addEventListener('focus', () => setTimeout(() => syncNow(), 600)); window.addEventListener('online', () => setTimeout(() => syncNow(), 1500)); }
     updateCloudPill(); updateSyncPill(); $('#btnTeam').hidden = !isAdmin();
     Cloud.me().then(u => { $('#btnTeam').hidden = !isAdmin(); if (u.must_change) showLogin('change'); }).catch(() => { });
     cloudReport(true); syncNow();
