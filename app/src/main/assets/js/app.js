@@ -839,6 +839,18 @@
   $('#pickOk').onclick = () => {
     const p = S.pick, c = map.center(); S.pick = null; p.draft.lat = c.lat.toFixed(6); p.draft.lon = c.lon.toFixed(6); layout(); openForm(p.f, p.draft);
   };
+  // Pegar una georeferencia (decimal, grados/minutos/segundos, UTM o enlace de mapa) para colocar el punto
+  $('#pickPaste').onclick = async () => {
+    let clip = ''; try { clip = await navigator.clipboard.readText(); } catch (e) { }
+    const m = modal('<h3>Pegar georeferencia</h3><p class="lead">Pega coordenadas (13.4542, -86.4069), grados/minutos/segundos, UTM o un enlace de Google Maps.</p><label class="field"><span>GEOREFERENCIA</span><input id="ppT" value="' + esc(Geo.parse(clip) ? clip.trim() : '') + '" placeholder="13.4542, -86.4069" autocomplete="off" autocapitalize="off"></label><p class="lead" id="ppE" style="min-height:18px"></p><div class="btnrow"><button class="btn" id="ppX">Cancelar</button><button class="btn accent" id="ppOk">' + ic('check') + 'Ir al punto</button></div>');
+    hydrate(m); const q = s => m.querySelector(s); setTimeout(() => { q('#ppT').focus(); q('#ppT').select(); }, 60);
+    q('#ppX').onclick = closeModal;
+    const go = () => {
+      const g = Geo.parse(q('#ppT').value); if (!g) { q('#ppE').textContent = 'No se entendió. Revisa el formato de la georeferencia'; return; }
+      closeModal(); map.flyTo(g.lat, g.lon, Math.max(map.z, 18), 0.5, 500); $('#pickCoords').textContent = coordTxt(g.lat, g.lon); toast('Punto colocado. Ajusta si hace falta y toca “Fijar aquí”', 3500);
+    };
+    q('#ppOk').onclick = go; q('#ppT').onkeydown = e => { if (e.key === 'Enter') go(); };
+  };
   $('#btnAdd').onclick = () => { if (S.sel) deselect(); openForm(null); };
 
   /* ---------- capas ---------- */
@@ -887,7 +899,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Cajas GPON <small style="font-size:12px;color:var(--muted);font-weight:500">v2.2 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Cajas GPON <small style="font-size:12px;color:var(--muted);font-weight:500">v2.3 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {

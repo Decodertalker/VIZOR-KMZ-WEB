@@ -10,8 +10,8 @@ android {
         applicationId 'com.cajasgpon.app'
         minSdk 29
         targetSdk 34
-        versionCode 12
-        versionName '2.2'
+        versionCode 13
+        versionName '2.3'
     }
     // Firma fija: así cada APK nuevo se instala como ACTUALIZACIÓN sin borrar los datos del teléfono.
     // (versionCode debe subir en cada versión; applicationId y esta firma nunca deben cambiar)
