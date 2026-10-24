@@ -48,3 +48,9 @@ Solo la primera vez (pasar de un APK viejo a este) hay que desinstalar el anteri
 === VERSION 2.5: LA APP APARECE EN "ABRIR CON" ===
 Al tocar una ubicación en WhatsApp u otra app, Vizor G aparece junto a Maps, Google Earth y Waze (geo: y enlaces de Google Maps).
 Abre el mapa en ese punto con el marcador, la caja más cercana y los botones de Waze/Google Maps.
+
+=== VERSION 2.7: MEDIR METRAJE CON GPS ===
+Medir (icono de regla) ahora tiene dos botones nuevos:
+- "Punto con mi GPS": agrega un punto del trazado en tu ubicación actual.
+- "Medir en vivo": camina y la app va marcando puntos con el GPS (cada pocos metros) y suma el metraje; la pantalla se mantiene encendida. "Detener" lo termina.
+Se ignoran lecturas con precisión peor a ±40 m. Los puntos manuales en el mapa siguen funcionando.

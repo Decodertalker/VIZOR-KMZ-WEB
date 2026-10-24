@@ -398,9 +398,13 @@
       const pts = S.meas.pts.map(p => m.toScreen(p[1], p[0]));
       ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
       ctx.strokeStyle = '#ff4d9d'; ctx.lineWidth = 4; ctx.stroke();
+      if (S.meas.live && S.pos) {  // tramo en vivo: del último punto a donde estás
+        const lp = S.meas.pts[S.meas.pts.length - 1], a0 = m.toScreen(lp[1], lp[0]), b0 = m.toScreen(S.pos.lat, S.pos.lon);
+        ctx.save(); ctx.setLineDash([8, 7]); ctx.beginPath(); ctx.moveTo(a0[0], a0[1]); ctx.lineTo(b0[0], b0[1]); ctx.strokeStyle = '#ff4d9d'; ctx.lineWidth = 4; ctx.stroke(); ctx.restore();
+      }
       pts.forEach((p, i) => {
         ctx.beginPath(); ctx.arc(p[0], p[1], 6, 0, 6.2832); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#ff4d9d'; ctx.lineWidth = 3; ctx.stroke();
-        if (i) pill(ctx, fmtD(hav(S.meas.pts[i - 1][1], S.meas.pts[i - 1][0], S.meas.pts[i][1], S.meas.pts[i][0])), (p[0] + pts[i - 1][0]) / 2, (p[1] + pts[i - 1][1]) / 2 - 12, '#ff4d9d');
+        if (i && Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1]) > 46) pill(ctx, fmtD(hav(S.meas.pts[i - 1][1], S.meas.pts[i - 1][0], S.meas.pts[i][1], S.meas.pts[i][0])), (p[0] + pts[i - 1][0]) / 2, (p[1] + pts[i - 1][1]) / 2 - 12, '#ff4d9d');
       });
     }
 
@@ -540,6 +544,7 @@
     if (!S.centered) { S.centered = true; if (!S.userMoved && !S.sel) map.flyTo(S.pos.lat, S.pos.lon, 16.5, 0.4); }
     else if (S.follow && !S.sel && !S.pick) map.flyTo(S.pos.lat, S.pos.lon, Math.max(map.z, 16), 0.4, 400);
     cloudReport();
+    if (S.meas.on && S.meas.live) measureStep();
     const now = Date.now();
     if (hav(lastNb.lat, lastNb.lon, S.pos.lat, S.pos.lon) > 8 || now - lastNb.t > 6000) { lastNb = { lat: S.pos.lat, lon: S.pos.lon, t: now }; updateNearby(); }
     if (S.sel) renderDetail(true);
@@ -757,6 +762,7 @@
     m.querySelector('#mmTrace').onclick = () => { closeModal(); startMeasure(f); };
   }
   function startMeasure(f) {
+    if (S.meas.live) stopLive();
     S.meas = { on: true, pts: f ? [[f.c[0], f.c[1]]] : [] };
     if (f && S.sel) { S.sel = null; S.selAreas = []; }
     hideResults(); layout(); updateMeasure();
@@ -765,9 +771,39 @@
   }
   function updateMeasure() {
     let t = 0; for (let i = 1; i < S.meas.pts.length; i++) t += hav(S.meas.pts[i - 1][1], S.meas.pts[i - 1][0], S.meas.pts[i][1], S.meas.pts[i][0]);
-    $('#mTotal').textContent = fmtD(t) === '—' ? '0 m' : fmtD(t); map.invalidate();
+    if (S.meas.live && S.pos && S.meas.pts.length) { const lp = S.meas.pts[S.meas.pts.length - 1]; t += hav(lp[1], lp[0], S.pos.lat, S.pos.lon); }
+    $('#mTotal').textContent = fmtD(t) === '—' ? '0 m' : fmtD(t);
+    const live = !!S.meas.live; $('#mLive').classList.toggle('live', live); $('#mLive').classList.toggle('accent', live); $('#mLive').lastChild.textContent = live ? 'Detener' : 'Medir en vivo';
+    $('#mSub').textContent = live ? (S.pos ? 'En vivo · GPS ±' + Math.round(S.pos.acc) + ' m' + (S.pos.acc > 25 ? ' (señal débil)' : '') : 'En vivo · buscando GPS…') : 'Metraje del trazado';
+    map.invalidate();
   }
-  function stopMeasure() { S.meas = { on: false, pts: [] }; layout(); map.invalidate(); }
+  let wakeLock = null;
+  async function keepAwake(on) { try { if (on && navigator.wakeLock) wakeLock = await navigator.wakeLock.request('screen'); else if (wakeLock) { await wakeLock.release(); wakeLock = null; } } catch (e) { } }
+  function stopLive() { if (S.meas.live) { S.meas.live = false; keepAwake(false); } }
+  function stopMeasure() { stopLive(); S.meas = { on: false, pts: [] }; layout(); map.invalidate(); }
+  // Medir caminando: cada vez que el GPS avanza lo suficiente se agrega un punto
+  function measureStep() {
+    if (!S.meas.on || !S.meas.live || !S.pos) return;
+    const p = S.pos, last = S.meas.pts[S.meas.pts.length - 1];
+    if (p.acc > 40) { updateMeasure(); return; }  // señal muy mala: no se agregan puntos
+    if (!last) S.meas.pts.push([p.lon, p.lat]);
+    else if (hav(last[1], last[0], p.lat, p.lon) >= Math.max(4, Math.min(p.acc * 0.6, 12))) S.meas.pts.push([p.lon, p.lat]);
+    updateMeasure();
+  }
+  $('#mGpsPt').onclick = async () => {
+    if (!S.pos) { startGpsOnce(); toast('Esperando señal GPS… intenta de nuevo en unos segundos', 3000); return; }
+    if (S.pos.acc > 50 && !(await confirmBox('Señal GPS débil', 'La precisión ahora es de ±' + Math.round(S.pos.acc) + ' m. ¿Agregar este punto igual?', 'Agregar'))) return;
+    S.meas.pts.push([S.pos.lon, S.pos.lat]); updateMeasure(); map.flyTo(S.pos.lat, S.pos.lon, Math.max(map.z, 18), 0.4, 400);
+    toast('Punto agregado en tu ubicación (±' + Math.round(S.pos.acc) + ' m)', 2200);
+  };
+  $('#mLive').onclick = () => {
+    if (S.meas.live) { stopLive(); updateMeasure(); toast('Medición en vivo detenida', 2000); return; }
+    if (S.gpsDenied) { toast('Sin permiso de ubicación. Toca “GPS sin permiso” para activarlo', 4000); return; }
+    startGpsOnce(); S.meas.live = true; keepAwake(true);
+    S.follow = true; $('#btnLocate').classList.add('on');
+    if (S.pos) map.flyTo(S.pos.lat, S.pos.lon, Math.max(map.z, 18), 0.4, 400);
+    toast('Camina el trayecto: se van marcando puntos con tu GPS. Toca Detener al terminar', 4500); measureStep(); updateMeasure();
+  };
   $('#btnMeasure').onclick = () => S.meas.on ? stopMeasure() : startMeasure(null);
   $('#mUndo').onclick = () => { S.meas.pts.pop(); updateMeasure(); };
   $('#mClear').onclick = () => { S.meas.pts = []; updateMeasure(); };
@@ -906,7 +942,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v2.6 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v2.7 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {

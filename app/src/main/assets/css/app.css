@@ -259,3 +259,8 @@ select.sel{width:100%;height:48px;border-radius:13px;border:1px solid var(--line
 .evcom textarea{width:100%;background:var(--solid2);border:1px solid var(--line);border-radius:14px;padding:12px 14px;font-size:16px;outline:0;resize:vertical;display:block}.evcom textarea:focus{border-color:var(--accent)}.evcom{margin:8px 0 12px}
 
 #pickBar{flex-wrap:wrap}#pickBar .pp{flex:1 1 100%;order:3;justify-content:center}#pickBar .mb-btns{order:2}
+
+#measureBar{flex-wrap:wrap}#measureBar .mrow{flex:1 1 100%;order:3;display:flex;gap:8px}#measureBar .mrow .btn{flex:1;justify-content:center;white-space:nowrap}#measureBar .mb-btns{order:2}
+#mLive.live::before{content:'';width:9px;height:9px;border-radius:50%;background:#e5173f;box-shadow:0 0 0 2px #fff;margin-right:6px;animation:mlp 1s infinite}
+@keyframes mlp{50%{opacity:.25}}
+#mLive span{color:inherit}

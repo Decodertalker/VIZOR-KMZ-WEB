@@ -89,7 +89,11 @@
   </div>
 
   <div id="measureBar" class="glass" hidden>
-    <div><small>Metraje del trazado</small><b id="mTotal">0 m</b></div>
+    <div><small id="mSub">Metraje del trazado</small><b id="mTotal">0 m</b></div>
+    <div class="mrow">
+      <button class="btn small" id="mGpsPt"><i data-i="locate"></i>Punto con mi GPS</button>
+      <button class="btn small" id="mLive"><i data-i="nav"></i><span>Medir en vivo</span></button>
+    </div>
     <div class="mb-btns">
       <button class="btn ghost small" id="mUndo"><i data-i="undo"></i>Deshacer</button>
       <button class="btn ghost small" id="mClear"><i data-i="trash"></i></button>
