@@ -43,6 +43,7 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> filePathCallback;
     private GeolocationPermissions.Callback geoCallback;
     private String geoOrigin;
+    private volatile String pendingGeo = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -120,7 +121,67 @@ public class MainActivity extends Activity {
             requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION);
         }
 
+        handleIntent(getIntent());
         web.loadUrl("https://" + HOST + "/index.html");
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleIntent(intent);
+    }
+
+    /** Ubicación recibida desde otra app (geo:… o enlace de Google Maps). Los enlaces cortos se resuelven aparte. */
+    private void handleIntent(Intent intent) {
+        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction()) || intent.getData() == null) return;
+        final String raw = intent.getData().toString();
+        intent.setData(null);
+        if (raw.startsWith("http") && (raw.contains("maps.app.goo.gl") || raw.contains("://goo.gl/"))) {
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    pendingGeo = resolveShort(raw);
+                    pushGeo();
+                }
+            }).start();
+        } else {
+            pendingGeo = raw;
+            pushGeo();
+        }
+    }
+
+    private String resolveShort(String url) {
+        String cur = url;
+        try {
+            for (int i = 0; i < 6; i++) {
+                java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(cur).openConnection();
+                c.setInstanceFollowRedirects(false);
+                c.setConnectTimeout(6000);
+                c.setReadTimeout(6000);
+                c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) Chrome/120 Mobile");
+                int code = c.getResponseCode();
+                String loc = c.getHeaderField("Location");
+                c.disconnect();
+                if (code >= 300 && code < 400 && loc != null) {
+                    cur = new java.net.URL(new java.net.URL(cur), loc).toString();
+                    if (cur.contains("@") || cur.contains("!3d") || cur.contains("q=")) return cur;
+                } else {
+                    break;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return cur;
+    }
+
+    private void pushGeo() {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (web != null) web.evaluateJavascript("window.__geoIntent && window.__geoIntent()", null);
+            }
+        });
     }
 
     private boolean hasLocationPermission() {
@@ -196,6 +257,13 @@ public class MainActivity extends Activity {
     private static final String BOOT_ID = java.util.UUID.randomUUID().toString();
 
     private class Bridge {
+        @JavascriptInterface
+        public String takeGeo() {
+            String g = pendingGeo;
+            pendingGeo = "";
+            return g == null ? "" : g;
+        }
+
         @JavascriptInterface
         public String bootId() {
             return BOOT_ID;

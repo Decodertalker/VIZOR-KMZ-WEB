@@ -17,7 +17,7 @@
       this.src = null; this.tiles = new Map(); this.queue = []; this.inflight = 0; this.frame = 0;
       this.bg = '#0b1220'; this.grid = 'rgba(255,255,255,.04)';
       this.vec = null; this.onNetBad = null; this._fails = 0; this._okAt = 0;
-      this.onDraw = null; this.onTap = null; this.onMove = null; this.onMoveEnd = null; this.onUserMove = null;
+      this.lock = null; this.onDraw = null; this.onTap = null; this.onMove = null; this.onMoveEnd = null; this.onUserMove = null;
       this.anim = null; this.inertia = null; this._raf = 0; this._moveEndT = 0;
       this.gm = null; this._hold = 0; this._gl = 0;
       this._bind();
@@ -46,6 +46,7 @@
     }
     zoomAt(px, py, nz) {
       nz = clamp(nz, this.minZ, this.maxZ);
+      if (this.lock) { px = this.w / 2; py = this.h / 2; this.cx = this.lock.x; this.cy = this.lock.y; }  // punto fijado: el zoom no lo mueve
       const wx = (px - this.w / 2) / this.s + this.cx, wy = (py - this.h / 2) / this.s + this.cy;
       this.z = nz; this._setS();
       this.cx = wx - (px - this.w / 2) / this.s; this.cy = wy - (py - this.h / 2) / this.s;
@@ -246,6 +247,7 @@
         if (P.size === 1) {
           const dx = p.x - prev.x, dy = p.y - prev.y; moved += Math.abs(dx) + Math.abs(dy);
           if (moved < 6) return;
+          if (this.lock) this.lock = null;  // al arrastrar el mapa se suelta el punto fijado
           this.cx -= dx / this.s; this.cy -= dy / this.s; this._fixCenter();
           const now = performance.now(), dt = Math.max(now - v.t, 1);
           v = { x: v.x * .6 + (dx / dt) * .4, y: v.y * .6 + (dy / dt) * .4, t: now };
@@ -254,6 +256,7 @@
           const s = pstate();
           this.z = clamp(pinch.z + Math.log2(s.d / pinch.d), this.minZ, this.maxZ); this._setS();
           this.cx = pinch.wx - (s.mx - this.w / 2) / this.s; this.cy = pinch.wy - (s.my - this.h / 2) / this.s;
+          if (this.lock) { this.cx = this.lock.x; this.cy = this.lock.y; }
           this._fixCenter(); this.invalidate(); this._emitMove();
         }
       });

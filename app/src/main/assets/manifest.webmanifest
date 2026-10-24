@@ -1,6 +1,6 @@
 {
-  "name": "Cajas GPON",
-  "short_name": "Cajas GPON",
+  "name": "Vizor G",
+  "short_name": "Vizor G",
   "description": "Cajas cercanas por GPS, navegación con Waze, metraje y exportación a Google Earth. Funciona sin conexión.",
   "lang": "es",
   "start_url": "./",

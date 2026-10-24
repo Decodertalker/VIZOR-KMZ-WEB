@@ -1,4 +1,4 @@
-/* Cajas GPON — lógica principal */
+/* Vizor G — lógica principal */
 (function () {
   'use strict';
   const $ = s => document.querySelector(s);
@@ -441,8 +441,9 @@
       }
     }
     // punto buscado
-    if (S.pin) {
-      const [x, y] = m.toScreen(S.pin.lat, S.pin.lon);
+    const pinPt = S.pin || (S.pick && S.pick.anchor);
+    if (pinPt) {
+      const [x, y] = m.toScreen(pinPt.lat, pinPt.lon);
       ctx.beginPath(); ctx.arc(x, y, 5, 0, 6.2832); ctx.fillStyle = 'rgba(255,210,63,.35)'; ctx.fill();
       ctx.beginPath(); ctx.moveTo(x, y); ctx.bezierCurveTo(x - 6, y - 14, x - 15, y - 20, x - 15, y - 31); ctx.arc(x, y - 31, 15, Math.PI, 0); ctx.bezierCurveTo(x + 15, y - 20, x + 6, y - 14, x, y); ctx.closePath();
       ctx.fillStyle = '#ffd23f'; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = '#1b2230'; ctx.stroke();
@@ -545,20 +546,26 @@
     map.invalidate();
   }
   function onGpsErr(e) {
+    // Equipos sin GPS (PC): si falla la alta precisión, se usa la ubicación por red / Wi-Fi
+    if ((e.code === 2 || e.code === 3) && !S.lowAcc) {
+      S.lowAcc = true; try { if (S.watchId != null) navigator.geolocation.clearWatch(S.watchId); } catch (x) { }
+      const pg0 = $('#pillGps'); pg0.hidden = false; pg0.className = 'pill'; pg0.textContent = 'Buscando ubicación…';
+      S.watchId = navigator.geolocation.watchPosition(onPos, onGpsErr, { enableHighAccuracy: false, maximumAge: 30000, timeout: 30000 }); return;
+    }
     const pg = $('#pillGps'); pg.hidden = false; pg.className = 'pill warn tap';
-    pg.textContent = e.code === 1 ? 'GPS sin permiso · toca aquí' : 'Sin señal GPS';
+    pg.textContent = e.code === 1 ? 'GPS sin permiso · toca aquí' : 'Sin señal GPS · toca para reintentar';
     if (e.code === 1) { S.gpsDenied = true; if (!S.gpsToast) { S.gpsToast = true; toast('Sin permiso de ubicación. Toca “GPS sin permiso” para ver cómo activarlo', 4500); } }
     updateCloudPill();
   }
   function closeGpsHelp() { const m = document.querySelector('#modalRoot [data-gpshelp]'); if (m) closeModal(); }
   $('#pillGps').onclick = () => {
-    if (!S.gpsDenied) { if (!S.pos) { toast('Buscando señal GPS…'); startGps(); } return; }
+    if (!S.gpsDenied) { if (!S.pos) { toast('Buscando señal GPS…'); S.lowAcc = false; startGps(); } return; }
     const web = !NB;
     const m = modal('<h3 data-gpshelp>Activar la ubicación</h3><p class="lead">' + (web
       ? 'El navegador bloqueó la ubicación de esta página. Para verte en el mapa:'
       : 'La app no tiene permiso de ubicación. Para verte en el mapa:') + '</p><ol class="steps">' + (web
       ? '<li>Toca el <b>candado</b> (o el icono de ubicación tachado) a la izquierda de la dirección web.</li><li>Entra a <b>Permisos</b> o <b>Configuración del sitio</b>.</li><li>En <b>Ubicación</b> elige <b>Permitir</b>.</li><li>Vuelve aquí: se activa sola, o pulsa “Reintentar”.</li>'
-      : '<li>Abre los <b>Ajustes</b> del teléfono › <b>Aplicaciones</b> › <b>Cajas GPON</b>.</li><li>Entra a <b>Permisos</b> › <b>Ubicación</b>.</li><li>Elige <b>Permitir solo mientras se usa la app</b> y activa <b>Ubicación precisa</b>.</li><li>Vuelve a la app y pulsa “Reintentar”.</li>') + '</ol>' +
+      : '<li>Abre los <b>Ajustes</b> del teléfono › <b>Aplicaciones</b> › <b>Vizor G</b>.</li><li>Entra a <b>Permisos</b> › <b>Ubicación</b>.</li><li>Elige <b>Permitir solo mientras se usa la app</b> y activa <b>Ubicación precisa</b>.</li><li>Vuelve a la app y pulsa “Reintentar”.</li>') + '</ol>' +
       '<p class="lead">Para ver tu posición, el GPS también debe estar encendido en el dispositivo. Si solo administras desde la computadora, no necesitas activarlo.</p>' +
       '<div class="btnrow"><button class="btn" id="gpC">Cerrar</button><button class="btn accent" id="gpR">Reintentar</button></div>');
     m.querySelector('#gpC').onclick = closeModal;
@@ -830,14 +837,14 @@
     };
   }
   function startPick(draft, f) {
-    S.pick = { draft, f }; layout();
+    S.pick = { draft, f }; map.lock = null; layout();
     if (draft.lat !== '' && isFinite(parseFloat(draft.lat)) && isFinite(parseFloat(draft.lon))) map.flyTo(parseFloat(draft.lat), parseFloat(draft.lon), Math.max(map.z, 18), 0.5, 500);
     else if (S.pos) map.flyTo(S.pos.lat, S.pos.lon, Math.max(map.z, 18), 0.5, 500);
     $('#pickCoords').textContent = coordTxt(map.center().lat, map.center().lon);
   }
-  $('#pickCancel').onclick = () => { const p = S.pick; S.pick = null; layout(); openForm(p.f, p.draft); };
+  $('#pickCancel').onclick = () => { const p = S.pick; S.pick = null; map.lock = null; layout(); openForm(p.f, p.draft); };
   $('#pickOk').onclick = () => {
-    const p = S.pick, c = map.center(); S.pick = null; p.draft.lat = c.lat.toFixed(6); p.draft.lon = c.lon.toFixed(6); layout(); openForm(p.f, p.draft);
+    const p = S.pick, c = (p.anchor && map.lock) ? p.anchor : map.center(); S.pick = null; map.lock = null; p.draft.lat = c.lat.toFixed(6); p.draft.lon = c.lon.toFixed(6); layout(); openForm(p.f, p.draft);
   };
   // Pegar una georeferencia (decimal, grados/minutos/segundos, UTM o enlace de mapa) para colocar el punto
   $('#pickPaste').onclick = async () => {
@@ -847,7 +854,7 @@
     q('#ppX').onclick = closeModal;
     const go = () => {
       const g = Geo.parse(q('#ppT').value); if (!g) { q('#ppE').textContent = 'No se entendió. Revisa el formato de la georeferencia'; return; }
-      closeModal(); map.flyTo(g.lat, g.lon, Math.max(map.z, 18), 0.5, 500); $('#pickCoords').textContent = coordTxt(g.lat, g.lon); toast('Punto colocado. Ajusta si hace falta y toca “Fijar aquí”', 3500);
+      closeModal(); if (S.pick) { S.pick.anchor = { lat: g.lat, lon: g.lon }; map.lock = { x: Merc.mxOf(g.lon), y: Merc.myOf(g.lat) }; } map.flyTo(g.lat, g.lon, Math.max(map.z, 18), 0.5, 500); $('#pickCoords').textContent = coordTxt(g.lat, g.lon); toast('Punto marcado. Puedes hacer zoom sin que se mueva; si arrastras el mapa lo ajustas. Luego toca “Fijar aquí”', 4500); map.invalidate();
     };
     q('#ppOk').onclick = go; q('#ppT').onkeydown = e => { if (e.key === 'Enter') go(); };
   };
@@ -899,7 +906,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Cajas GPON <small style="font-size:12px;color:var(--muted);font-weight:500">v2.3 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v2.6 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {
@@ -1077,6 +1084,21 @@
     deselect(); S.pin = { lat, lon }; S.userMoved = true; S.follow = false; $('#btnLocate').classList.remove('on');
     layout(); renderPin(); map.flyTo(lat, lon, Math.max(map.z, 17.5), 0.35); map.invalidate();
   }
+  // Ubicación recibida desde otra app (WhatsApp, Maps…): geo:lat,lon o enlace de mapa
+  function geoFromShared(raw) {
+    let t = String(raw || ''); try { t = decodeURIComponent(t); } catch (e) { }
+    let m = t.match(/[?&]q=(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/i);
+    if (!m) { const g = Geo.parse(t); if (g) return g; }
+    if (!m) m = t.match(/^geo:(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i);
+    if (m && !(+m[1] === 0 && +m[2] === 0) && Math.abs(+m[1]) <= 90 && Math.abs(+m[2]) <= 180) return { lat: +m[1], lon: +m[2] };
+    return null;
+  }
+  window.__geoIntent = () => {
+    if (!NB || !NB.takeGeo) return; const raw = NB.takeGeo(); if (!raw) return;
+    const g = geoFromShared(raw);
+    if (!g) { toast('Ese enlace no trae coordenadas que la app pueda abrir', 4500); return; }
+    closeModal(); setPin(g.lat, g.lon); toast('Ubicación recibida', 2500);
+  };
   function clearPin() { S.pin = null; layout(); map.invalidate(); }
   function renderPin() {
     const p = S.pin; if (!p) return;
@@ -1697,7 +1719,7 @@
       const v = id => m.querySelector(id).value.trim(); const btn = m.querySelector('#nuS'); btn.disabled = true;
       try {
         const u = await Cloud.createUser(v('#nuU').toLowerCase(), v('#nuN'), v('#nuC'), v('#nuR'), v('#nuP'));
-        const pass = v('#nuP'), txt = 'Cajas GPON\nUsuario: ' + u.username + '\nContraseña inicial: ' + pass;
+        const pass = v('#nuP'), txt = 'Vizor G\nUsuario: ' + u.username + '\nContraseña inicial: ' + pass;
         const m2 = modal('<h3>Usuario creado</h3><p class="lead">Entrégale estos datos a ' + esc(u.name) + '. Al entrar por primera vez, la app le pedirá crear su propia contraseña.</p><div class="credbox">Usuario: <b>' + esc(u.username) + '</b><br>Contraseña: <b>' + esc(pass) + '</b></div><div class="btnrow"><button class="btn" id="crCp">' + ic('copy') + 'Copiar</button><button class="btn accent" id="crOk">Listo</button></div>');
         hydrate(m2); m2.querySelector('#crCp').onclick = async () => toast((await copyText(txt)) ? 'Datos copiados' : 'No se pudo copiar'); m2.querySelector('#crOk').onclick = openAdmin;
       } catch (e) { btn.disabled = false; toast(Cloud.errText(e), 4000); }
@@ -1720,7 +1742,7 @@
       q('#udPw').onclick = () => {
         const pw = genPass(), m2 = modal('<h3>Nueva contraseña</h3><p class="lead">Para ' + esc(u.name) + '. Tendrá que cambiarla al entrar y su sesión actual se cerrará.</p><label class="field"><span>CONTRASEÑA TEMPORAL</span><input id="rpP" value="' + pw + '" autocapitalize="none" spellcheck="false"></label><div class="btnrow"><button class="btn" id="rpX">Cancelar</button><button class="btn accent" id="rpS">Guardar</button></div>');
         m2.querySelector('#rpX').onclick = () => openUserDetail(u);
-        m2.querySelector('#rpS').onclick = async () => { const p = m2.querySelector('#rpP').value.trim(); try { await Cloud.resetPassword(u.id, p); await copyText('Cajas GPON\nUsuario: ' + u.username + '\nContraseña temporal: ' + p); toast('Contraseña cambiada y copiada', 3500); openAdmin(); } catch (e) { toast(Cloud.errText(e), 4000); } };
+        m2.querySelector('#rpS').onclick = async () => { const p = m2.querySelector('#rpP').value.trim(); try { await Cloud.resetPassword(u.id, p); await copyText('Vizor G\nUsuario: ' + u.username + '\nContraseña temporal: ' + p); toast('Contraseña cambiada y copiada', 3500); openAdmin(); } catch (e) { toast(Cloud.errText(e), 4000); } };
       };
       if (!self) {
         q('#udAct').onclick = async () => { try { await Cloud.setActive(u.id, u.active === false); toast(u.active === false ? 'Usuario activado' : 'Usuario suspendido'); openAdmin(); } catch (e) { toast(Cloud.errText(e), 4000); } };
@@ -1747,6 +1769,7 @@
     initCloud();
     ensureVector().then(async () => { S.vecSaved = await Vec.isSaved(VEC_URL); netState(); });
     startGpsOnce();
+    setTimeout(() => window.__geoIntent(), 600);
     if (!NB && 'serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
       // Actualización automática de la web: cuando se publica una versión nueva, la página se recarga sola (sin Ctrl+F5)
       let skip = !navigator.serviceWorker.controller, reloading = false; // la primera toma de control (instalación inicial) no recarga

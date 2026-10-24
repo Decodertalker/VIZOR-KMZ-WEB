@@ -44,3 +44,7 @@ NOTAS
 El APK ahora se firma siempre con la misma llave (app/cajas.keystore). Instalar un APK nuevo encima del anterior lo ACTUALIZA y conserva todos los datos.
 Reglas: no borres cajas.keystore, no cambies applicationId y SUBE versionCode en app/build.gradle en cada versión (ahora 11).
 Solo la primera vez (pasar de un APK viejo a este) hay que desinstalar el anterior. ANTES de hacerlo, abre la app, espera la etiqueta "Sincronizado" y listo: al volver a entrar todo regresa del servidor.
+
+=== VERSION 2.5: LA APP APARECE EN "ABRIR CON" ===
+Al tocar una ubicación en WhatsApp u otra app, Vizor G aparece junto a Maps, Google Earth y Waze (geo: y enlaces de Google Maps).
+Abre el mapa en ese punto con el marcador, la caja más cercana y los botones de Waze/Google Maps.
