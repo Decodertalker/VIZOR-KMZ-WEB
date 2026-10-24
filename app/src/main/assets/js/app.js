@@ -887,7 +887,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Cajas GPON <small style="font-size:12px;color:var(--muted);font-weight:500">v2.1 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Cajas GPON <small style="font-size:12px;color:var(--muted);font-weight:500">v2.2 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {
@@ -1735,7 +1735,19 @@
     initCloud();
     ensureVector().then(async () => { S.vecSaved = await Vec.isSaved(VEC_URL); netState(); });
     startGpsOnce();
-    if (!NB && 'serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => { });
+    if (!NB && 'serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+      // Actualización automática de la web: cuando se publica una versión nueva, la página se recarga sola (sin Ctrl+F5)
+      let skip = !navigator.serviceWorker.controller, reloading = false; // la primera toma de control (instalación inicial) no recarga
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (skip) { skip = false; return; } if (reloading) return; reloading = true;
+        const tryReload = () => { if ($('#modalRoot').firstChild || (document.activeElement && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName) && document.activeElement.value)) setTimeout(tryReload, 4000); else location.reload(); };
+        setTimeout(tryReload, 800);
+      });
+      navigator.serviceWorker.register('sw.js').then(reg => {
+        const chk = () => { try { reg.update(); } catch (e) { } };
+        setInterval(chk, 5 * 60000); document.addEventListener('visibilitychange', () => { if (!document.hidden) chk(); });
+      }).catch(() => { });
+    }
     window.__back = () => {
       if ($('#modalRoot').firstChild) { closeModal(); return true; }
       if (S.pick) { $('#pickCancel').click(); return true; }
