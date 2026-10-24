@@ -1,0 +1,21 @@
+VERSION WEB (v1.6) - la misma app, desde el navegador, publicada gratis en GitHub Pages
+
+ACTIVARLA (una sola vez)
+1. En tu repositorio de GitHub: Settings > Pages.
+2. En "Build and deployment" > "Source", elige "GitHub Actions".
+3. Ve a la pestana Actions: el flujo "Publicar web" corre solo con cada subida (1-2 minutos). Si no, entra y pulsa "Run workflow".
+4. Al terminar, la direccion queda en Settings > Pages, con esta forma:  https://TU-USUARIO.github.io/NOMBRE-DEL-REPOSITORIO/
+   Entra con el mismo usuario y contrasena de la app.
+
+IMPORTANTE
+- GitHub Pages gratis exige que el repositorio sea PUBLICO. Esta bien: dentro solo van la app y la clave publica de Supabase
+  (disenada para ser publica). NO subas el archivo 1_setup.sql ni claves "service_role/secret".
+- Los datos (usuarios, cajas, evaluaciones) NO estan en GitHub: estan en Supabase. Hay que ejecutar en Supabase el archivo
+  2_sincronizacion.sql (una vez) para activar la sincronizacion.
+
+QUE COMPARTEN WEB Y APP
+- Cajas, areas y rutas que se agreguen, editen, importen (KMZ) o eliminen, en cualquiera de los dos, aparecen en el otro (maximo 1 minuto o con Menu > Sincronizar ahora).
+- Evaluaciones tecnicas: el administrador las carga (Excel) y cada tecnico recibe solo las que tienen su codigo tecnico; el estado y la nota que
+  ponga el tecnico vuelven al administrador.
+- Solo el administrador elimina datos y carga evaluaciones. Los tecnicos pueden agregar y editar cajas.
+- Menu > "Datos de cajas y KMZ" (administrador): ver lo importado por archivo, eliminar un KMZ completo o buscar y eliminar una caja.

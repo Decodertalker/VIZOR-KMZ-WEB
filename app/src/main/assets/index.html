@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0b1220">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Cajas GPON">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Cajas GPON</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app">
+  <div id="mapwrap"><div id="gmap" hidden></div><canvas id="map"></canvas><div id="attrib"></div></div>
+
+  <header id="top">
+    <button class="glass icon-btn" id="btnMenu" aria-label="Menú"><i data-i="menu"></i></button>
+    <div class="glass search">
+      <i data-i="search"></i>
+      <input id="q" type="search" placeholder="Buscar caja, orden o coordenadas…" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <button id="qClear" class="plain" hidden aria-label="Borrar"><i data-i="x"></i></button>
+    </div>
+  </header>
+  <div id="results" class="glass" hidden></div>
+
+  <div id="pills">
+    <span class="pill" id="pillNet" hidden><i data-i="offline"></i>Sin conexión</span>
+    <span class="pill" id="pillGps" hidden></span>
+    <span class="pill" id="pillCloud" hidden></span>
+    <span class="pill" id="pillSync" hidden></span>
+    <span class="pill tap" id="pillRoute" hidden></span>
+  </div>
+
+  <div id="fabs">
+    <button class="glass icon-btn" id="btnTeam" aria-label="Equipo en el mapa" hidden><i data-i="team"></i></button>
+    <button class="glass icon-btn" id="btnLocate" aria-label="Mi ubicación"><i data-i="locate"></i></button>
+    <button class="glass icon-btn" id="btnLayers" aria-label="Capas"><i data-i="layers"></i></button>
+    <button class="glass icon-btn" id="btnMeasure" aria-label="Medir"><i data-i="ruler"></i></button>
+    <button class="icon-btn primary" id="btnAdd" aria-label="Agregar caja"><i data-i="plus"></i></button>
+  </div>
+
+  <section id="nearby" class="sheet glass" data-state="peek">
+    <button class="grab" id="nbGrab" aria-label="Expandir lista"></button>
+    <div class="sheet-h">
+      <div><h2>Cajas cercanas</h2><p id="nbSub">Buscando…</p></div>
+      <div class="chips" id="nbChips"></div>
+    </div>
+    <div id="nbList" class="cards"></div>
+  </section>
+
+  <section id="detail" class="sheet glass" hidden>
+    <button class="grab" id="dGrab" aria-label="Cerrar"></button>
+    <div class="d-scroll">
+      <div class="d-head">
+        <span class="d-ico" id="dIco"></span>
+        <div class="d-title"><h2 id="dName"></h2><p id="dSub"></p></div>
+        <button class="icon-btn small" id="dClose" aria-label="Cerrar"><i data-i="x"></i></button>
+      </div>
+      <div class="d-stats" id="dStats"></div>
+      <div class="d-actions">
+        <button class="btn waze" id="aWaze"><i data-i="nav"></i>Ir con Waze</button>
+        <button class="btn" id="aMetraje"><i data-i="ruler"></i>Metraje</button>
+      </div>
+      <div class="d-actions2">
+        <button class="btn ghost" id="aGmaps"><i data-i="map"></i><span>Google Maps</span></button>
+        <button class="btn ghost" id="aCopy"><i data-i="copy"></i><span>Copiar</span></button>
+        <button class="btn ghost" id="aShare"><i data-i="share"></i><span>Enviar</span></button>
+        <button class="btn ghost" id="aEdit"><i data-i="edit"></i><span>Editar</span></button>
+      </div>
+      <dl class="d-info" id="dInfo"></dl>
+    </div>
+  </section>
+
+  <div id="pinBar" class="glass" hidden>
+    <div class="pb-top">
+      <div class="pb-t"><small id="pinSub">Punto buscado</small><b id="pinCoords">—</b><span id="pinNear"></span></div>
+      <button class="icon-btn small" id="pinX" aria-label="Quitar punto"><i data-i="x"></i></button>
+    </div>
+    <div class="pb-btns">
+      <button class="btn waze small" id="pinWaze"><i data-i="nav"></i>Waze</button>
+      <button class="btn small" id="pinCaja"><i data-i="box"></i>Caja cercana</button>
+      <button class="btn small accent" id="pinAdd"><i data-i="plus"></i>Caja aquí</button>
+    </div>
+  </div>
+
+  <div id="measureBar" class="glass" hidden>
+    <div><small>Metraje del trazado</small><b id="mTotal">0 m</b></div>
+    <div class="mb-btns">
+      <button class="btn ghost small" id="mUndo"><i data-i="undo"></i>Deshacer</button>
+      <button class="btn ghost small" id="mClear"><i data-i="trash"></i></button>
+      <button class="btn small accent" id="mDone"><i data-i="check"></i>Listo</button>
+    </div>
+  </div>
+
+  <div id="pickLayer" hidden>
+    <div class="cross"></div>
+    <div id="pickBar" class="glass">
+      <div><small>Mueve el mapa al punto exacto</small><b id="pickCoords">—</b></div>
+      <div class="mb-btns">
+        <button class="btn ghost small" id="pickCancel">Cancelar</button>
+        <button class="btn small accent" id="pickOk"><i data-i="check"></i>Fijar aquí</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="login" hidden>
+    <form id="loginForm" class="lg-card" autocomplete="on">
+      <div class="lg-logo"><i data-i="box"></i></div>
+      <h1>Cajas GPON</h1>
+      <p id="lgSub">Inicia sesión para continuar</p>
+      <div id="lgLogin">
+        <label class="field"><span>USUARIO</span><input id="lgU" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
+        <label class="field"><span>CONTRASEÑA</span><input id="lgP" type="password" autocomplete="current-password"></label>
+      </div>
+      <div id="lgChange" hidden>
+        <label class="field"><span>NUEVA CONTRASEÑA (MÍNIMO 8 CARACTERES)</span><input id="lgN1" type="password" autocomplete="new-password"></label>
+        <label class="field"><span>REPETIR CONTRASEÑA</span><input id="lgN2" type="password" autocomplete="new-password"></label>
+      </div>
+      <p id="lgErr" class="lg-err"></p>
+      <button class="btn accent wide" id="lgGo" type="submit">Entrar</button>
+      <button class="lg-link" type="button" id="lgCfg">Configurar servidor</button>
+    </form>
+  </div>
+
+  <div id="loading"><div class="spin"></div><p id="loadMsg">Preparando datos…</p></div>
+  <div id="modalRoot"></div>
+  <div id="toast" role="status"></div>
+  <input type="file" id="fileEval" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" hidden>
+  <input type="file" id="fileIn" accept=".kmz,.kml,application/vnd.google-earth.kmz,application/vnd.google-earth.kml+xml" multiple hidden>
+</div>
+
+<script src="lib/jszip.min.js"></script>
+<script src="js/db.js"></script>
+<script src="js/kml.js"></script>
+<script src="js/geo.js"></script>
+<script src="js/config.js"></script>
+<script src="js/cloud.js"></script>
+<script src="js/excel.js"></script>
+<script src="js/map.js"></script>
+<script src="js/vector.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

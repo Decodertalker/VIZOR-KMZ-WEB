@@ -1,0 +1,41 @@
+CAJAS GPON - APP ANDROID (APK)
+
+Es una app Android real que lleva dentro toda la aplicacion (cajas, areas, rutas) y funciona sin internet.
+Android 10 o superior.
+
+CÓMO OBTENER EL APK (sin instalar nada en tu computadora)
+1. Crea una cuenta gratis en github.com y un repositorio nuevo (privado esta bien).
+2. Sube TODO el contenido de esta carpeta al repositorio (Add file > Upload files, arrastrando la carpeta).
+   IMPORTANTE: debe subirse tambien la carpeta oculta ".github". Si no aparece, crea el archivo a mano:
+   Add file > Create new file, nombre: .github/workflows/build-apk.yml, y pega el contenido del que viene aqui.
+3. Ve a la pestana "Actions". El flujo "Crear APK" corre solo (2-5 minutos). Si no, entra a el y pulsa "Run workflow".
+4. Al terminar, abre la ejecucion, baja a "Artifacts" y descarga "CajasGPON-apk". Dentro esta app-debug.apk.
+5. Pasalo al telefono e instalalo (Android pedira permitir "instalar apps de origen desconocido").
+
+GOOGLE MAPS
+1. En console.cloud.google.com crea un proyecto, activa la facturacion (Google da un credito mensual gratis) y
+   habilita "Maps JavaScript API".
+2. Crea una clave API. Recomendado: restringela por sitios web (HTTP referrers) a:  https://appassets.androidplatform.net/*
+3. En la app: Menu > "Clave de Google Maps", pega la clave. Luego Capas > Google Maps.
+Sin internet la app usa su mapa propio automaticamente (las cajas siguen funcionando). Google no permite
+guardar su mapa sin conexion; para eso usa Oscuro/Claro/Satelite + "Mapa sin conexion".
+
+EVALUACIONES TECNICAS (v1.4)
+- Menu > "Evaluaciones tecnicas": importa un Excel (.xlsx o .csv) con las columnas: Nombre del cliente, Contacto del cliente,
+  Direccion del cliente, Ubicacion geografica caja, Orden, Tipo de orden (Instalacion / Dano), Codigo tecnico, Nombre del tecnico.
+  El boton "Plantilla" baja el Excel con ese formato. "Ubicacion geografica caja" puede ser coordenadas o el nombre de la caja.
+- Si vuelves a importar el mismo numero de orden, se actualiza sin perder el estado ni la nota.
+- Buscador: acepta coordenadas (12.1367, -86.2512 | 12°08'10"N 86°15'04"W | UTM 16P 580123 1340456 | enlace de Google Maps).
+
+MAPA SIN CONEXION (v1.3)
+- Con internet la app usa el mapa en linea. Si se pierde la conexion, cambia sola al mapa de calles de OpenStreetMap
+  guardado dentro de la app (y vuelve al mapa en linea cuando regresa el internet).
+- Ese mapa lo descarga el flujo de GitHub al compilar (paso "Mapa de calles sin conexion"): zona norte, hasta zoom 14.
+  Si ese paso falla el APK igual se compila, pero sin el mapa sin conexion. Para darle una URL propia:
+  Actions > Crear APK > Run workflow > pega la URL de un archivo .pmtiles.
+- Datos de mapa (c) colaboradores de OpenStreetMap.
+
+NOTAS
+- Waze y Google Maps se abren con sus apps si estan instaladas.
+- Exportar KMZ lo guarda en Descargas (o lo envia por WhatsApp/correo con "Enviar").
+- Si cambias algo en la app web, ejecuta ./sync-web.sh para copiarlo a esta app.
