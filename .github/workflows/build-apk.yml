@@ -1,0 +1,55 @@
+name: Crear APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      pmtiles_url:
+        description: 'URL .pmtiles de OpenStreetMap (opcional; si se deja vacío se busca la más reciente)'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Aceptar licencias de Android
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - name: Mapa de calles sin conexión (OpenStreetMap, zona norte)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PM_URL: ${{ github.event.inputs.pmtiles_url }}
+        run: |
+          set -x
+          mkdir -p app/src/main/assets/mapa /tmp/pm
+          gh release download --repo protomaps/go-pmtiles --pattern '*Linux_x86_64.tar.gz' --dir /tmp/pm
+          tar -xzf /tmp/pm/*Linux_x86_64.tar.gz -C /tmp/pm
+          URL="$PM_URL"
+          if [ -z "$URL" ]; then
+            for i in $(seq 0 20); do
+              D=$(date -u -d "-$i day" +%Y%m%d)
+              if curl -sfI "https://build.protomaps.com/$D.pmtiles" > /dev/null; then URL="https://build.protomaps.com/$D.pmtiles"; break; fi
+            done
+          fi
+          echo "Usando: $URL"
+          /tmp/pm/pmtiles extract "$URL" app/src/main/assets/mapa/norte.pmtiles \
+            --bbox=-86.67,12.90,-85.77,14.10 --maxzoom=14
+          ls -lh app/src/main/assets/mapa/
+
+      - name: Compilar
+        run: gradle assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CajasGPON-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
