@@ -105,7 +105,6 @@
 
     /* ---- mapa base ---- */
     setSource(src) {
-      if (this.src && this.tiles.size) { this.old = { src: this.src, tiles: this.tiles, t: performance.now() }; }
       this.src = src; this.tiles = new Map(); this.queue = []; this.low = []; this.invalidate();
     }
     _tileUrl(z, x, y) { return this.src.url.replace('{z}', z).replace('{x}', x).replace('{y}', y); }
@@ -130,8 +129,22 @@
         if (t.st !== 0) continue;
         if (t.f < this.frame - 2) { this.tiles.delete(t.key); continue; } // ya no se ve
         t.st = 1; this.inflight++;
-        const img = new Image(); img.crossOrigin = 'anonymous'; img.decoding = 'async';
-        img.onload = () => { this._fails = 0; this._okAt = performance.now(); if (img._b) URL.revokeObjectURL(img._b); t.st = 2; t.img = img; t.at = performance.now(); this.inflight--; this.invalidate(); this._pump(); };
+        const img = new Image(); img.crossOrigin = 'anonymous'; img.decoding = 'async'; const srcAt = this.src;
+        img.onload = () => {
+          this._fails = 0; this._okAt = performance.now(); if (img._b) URL.revokeObjectURL(img._b);
+          this.inflight--;
+          if (srcAt && srcAt.ph && t.z >= 14 && this._isPH(img)) {
+            // Esri no tiene imagen a este nivel: se usa la del nivel anterior ampliada
+            t.st = 4; if (t.z > 0 && this.tiles.get(t.key) === t) this._getTile(t.z - 1, t.x >> 1, t.y >> 1, true);
+          } else {
+            let d = img;
+            if (srcAt && srcAt.filter) {  // el filtro (modo oscuro) se aplica una sola vez, no en cada cuadro
+              try { const c = document.createElement('canvas'); c.width = img.naturalWidth || 256; c.height = img.naturalHeight || 256; const x = c.getContext('2d'); x.filter = srcAt.filter; x.drawImage(img, 0, 0); d = c; } catch (e) { d = img; }
+            }
+            t.st = 2; t.img = d; t.at = performance.now();
+          }
+          this.invalidate(); this._pump();
+        };
         img.onerror = () => {
           t.st = 3; t.fail = performance.now(); this.inflight--; this._pump();
           if (++this._fails >= 8 && performance.now() - this._okAt > 8000) { this._fails = 0; this.onNetBad && this.onNetBad(); }
@@ -148,6 +161,15 @@
         } else img.src = url;
       }
     }
+    _isPH(img) {
+      try {
+        const c = this._pc || (this._pc = document.createElement('canvas')); c.width = c.height = 8;
+        const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(img, 0, 0, 8, 8);
+        const d = x.getImageData(0, 0, 8, 8).data; let n = 0;
+        for (let i = 0; i < 256; i += 4) { const r = d[i], g = d[i + 1], b = d[i + 2]; if (r > 185 && r < 230 && Math.abs(r - g) < 7 && Math.abs(g - b) < 7) n++; }
+        return n >= 58;
+      } catch (e) { return false; }
+    }
     _evict() {
       if (this.tiles.size < 600) return;
       let n = this.tiles.size - 420;
@@ -162,20 +184,14 @@
       if ((x1 - x0 + 1) * (y1 - y0 + 1) > 120) return;
       this.frame++;
       const now = performance.now(); let miss = 0;
-      const old = this.old && now - this.old.t < 6000 ? this.old : (this.old = null);
       // pinta lo que haya de relleno: mosaicos del mapa anterior (mismo nivel) o el "padre" más cercano en memoria
       const under = (wx, y, dx, dy, sz) => {
-        if (old) {
-          const o = old.tiles.get(zi + '/' + wx + '/' + y);
-          if (o && o.st === 2) { ctx.filter = old.src.filter || 'none'; ctx.drawImage(o.img, dx, dy, sz, sz); ctx.filter = src.filter || 'none'; return true; }
-        }
         for (let d = 1; d <= 5 && zi - d >= 0; d++) {
           const k = Math.pow(2, d), p = this._getTile(zi - d, Math.floor(wx / k), Math.floor(y / k), false);
           if (p) { const ss = TS / k; ctx.drawImage(p.img, (wx % k) * ss, (y % k) * ss, ss, ss, dx, dy, sz, sz); return true; }
         }
         return false;
       };
-      ctx.filter = src.filter || 'none';
       for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
         const wx = ((x % n) + n) % n;
         const dx = (x / n - this.cx) * this.s + this.w / 2, dy = (y / n - this.cy) * this.s + this.h / 2, sz = size + 0.6;
@@ -183,8 +199,6 @@
         if (t) { ctx.drawImage(t.img, dx, dy, sz, sz); continue; }
         miss++; under(wx, y, dx, dy, sz);
       }
-      ctx.filter = 'none'; ctx.globalAlpha = 1;
-      if (old && !miss) this.old = null;
       this._pump(); this._evict();
     }
 

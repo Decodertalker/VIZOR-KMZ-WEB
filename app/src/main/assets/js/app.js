@@ -47,7 +47,7 @@
   const BASES = {
     dark: { label: 'Oscuro', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', maxZoom: 19, filter: 'invert(1) hue-rotate(180deg) brightness(.92) contrast(.95) saturate(.8)', attr: '© OpenStreetMap', bg: '#0b1220', grid: 'rgba(255,255,255,.045)' },
     light: { label: 'Calles', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', maxZoom: 19, attr: '© OpenStreetMap', bg: '#e9edf2', grid: 'rgba(20,30,50,.06)' },
-    sat: { label: 'Satélite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maxZoom: 17, attr: 'Esri, Maxar, Earthstar Geographics', bg: '#101820', grid: 'rgba(255,255,255,.05)' },
+    sat: { label: 'Satélite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maxZoom: 19, ph: true, attr: 'Esri, Maxar, Earthstar Geographics', bg: '#101820', grid: 'rgba(255,255,255,.05)' },
     gmap: { label: 'Google Maps · Mapa', google: true, gtype: 'roadmap', attr: '' },
     gsat: { label: 'Google Maps · Satélite', google: true, gtype: 'hybrid', attr: '' },
     vec: { label: 'Calles sin conexión', vector: true, attr: '© OpenStreetMap · Protomaps' },
@@ -166,7 +166,7 @@
       b = BASES.dark;
     }
     if (gmap) { map.detachGoogle(); $('#gmap').hidden = true; }
-    map.setSource(b.url ? { url: b.url, maxZoom: b.maxZoom, minZoom: 0, filter: b.filter || '' } : null);
+    map.setSource(b.url ? { url: b.url, maxZoom: b.maxZoom, minZoom: 0, filter: b.filter || '', ph: !!b.ph } : null);
     $('#attrib').textContent = b.attr; applyTheme();
   }
   /* ---------- utilidades geográficas ---------- */
@@ -483,6 +483,14 @@
   // Si hay "señal" pero no llegan mosaicos, tratamos la red como caída y probamos cada 25 s
   let probeT = 0;
   map.onNetBad = () => {
+    if (S.netBad || !navigator.onLine || S.probing) return;
+    // antes de pasar al mapa sin internet se comprueba de verdad la conexión (varios mosaicos pueden fallar solo porque no existen)
+    S.probing = true; const im0 = new Image(); let fin = false;
+    const verdict = ok => { if (fin) return; fin = true; S.probing = false; if (!ok) setNetBad(); };
+    im0.onload = () => verdict(true); im0.onerror = () => verdict(false); setTimeout(() => verdict(false), 6000);
+    im0.src = 'https://tile.openstreetmap.org/0/0/0.png?_=' + Date.now();
+  };
+  function setNetBad() {
     if (S.netBad || !navigator.onLine) return; S.netBad = true; netState(); applyBase();
     clearInterval(probeT);
     probeT = setInterval(() => {
@@ -913,6 +921,8 @@
       const b = e.target.closest('[data-b]'), l = e.target.closest('[data-l]');
       if (b) {
         const k = b.dataset.b;
+        // elegir un mapa a mano siempre se respeta: se descarta el aviso automático de "sin conexión"
+        S.netBad = false; clearInterval(probeT); map._fails = 0; map._okAt = performance.now(); netState();
         if (k === 'auto') { S.themeMode = 'auto'; if (S.base !== 'dark' && S.base !== 'light') S.base = 'dark'; autoTheme(); }
         else if (k === 'dark' || k === 'light') { S.themeMode = k; S.base = k; S.theme = k; applyBase(); }
         else { S.base = k; applyBase(); }
@@ -942,7 +952,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v2.9 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.0 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {

@@ -64,3 +64,9 @@ Se ignoran lecturas con precisión peor a ±40 m. Los puntos manuales en el mapa
 === VERSION 2.9: AJUSTE DE VELOCIDAD DEL MAPA ===
 Se retiraron de la 2.8 los cambios que podían hacer más lento el mapa en celulares (precarga de mosaicos vecinos, aparición con desvanecido, cambio del desenfoque al mover, más mosaicos en memoria).
 Se mantienen: satélite sin pantalla gris (se amplía la imagen disponible), fondo anterior mientras llega el mapa nuevo, zoom suave y una sola descarga por mosaico en Android.
+
+=== VERSION 3.0: CAMBIO DE MAPA, SATÉLITE Y FLUIDEZ ===
+- Cambiar de mapa (Oscuro/Calles/Satélite) funciona siempre sin recargar: elegir uno a mano descarta el modo "sin conexión" automático, y ese modo ahora se activa solo si de verdad no hay internet (se comprueba antes).
+- Satélite: vuelve a pedir el detalle completo (hasta zoom 19). Si Esri no tiene imagen en ese lugar ("Map data not yet available"), la app lo detecta y usa la imagen del nivel anterior ampliada.
+- Modo oscuro: el filtro de color se aplica una sola vez por mosaico (antes en cada cuadro), lo que aligera mucho el movimiento y el zoom.
+- Se quitó el desenfoque del fondo al abrir ventanas.
