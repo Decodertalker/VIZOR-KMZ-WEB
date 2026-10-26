@@ -60,3 +60,7 @@ Se ignoran lecturas con precisión peor a ±40 m. Los puntos manuales en el mapa
 - Al cambiar de mapa o hacer zoom no se ve gris/blanco: se muestra lo anterior mientras llegan los mosaicos nuevos, con aparición suave.
 - Zoom suave con rueda/doble toque, carga adelantada de mosaicos vecinos, más descargas en paralelo y una sola descarga por mosaico en Android.
 - Se quita el desenfoque de los paneles mientras se mueve el mapa y se limita la resolución del dibujo a 2x.
+
+=== VERSION 2.9: AJUSTE DE VELOCIDAD DEL MAPA ===
+Se retiraron de la 2.8 los cambios que podían hacer más lento el mapa en celulares (precarga de mosaicos vecinos, aparición con desvanecido, cambio del desenfoque al mover, más mosaicos en memoria).
+Se mantienen: satélite sin pantalla gris (se amplía la imagen disponible), fondo anterior mientras llega el mapa nuevo, zoom suave y una sola descarga por mosaico en Android.

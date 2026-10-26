@@ -71,7 +71,7 @@
       const zy = Math.log2((this.h - pad * 2) / (TS * Math.max(y1 - y0, 1e-9)));
       this.setView(latOf((y0 + y1) / 2), lonOf((x0 + x1) / 2), Math.min(zx, zy, 18));
     }
-    _emitMove() { const bd = document.body; if (bd && !bd.classList.contains('mv')) bd.classList.add('mv'); clearTimeout(this._mvT); this._mvT = setTimeout(() => bd && bd.classList.remove('mv'), 180); this.onMove && this.onMove(this); clearTimeout(this._moveEndT); this._moveEndT = setTimeout(() => this.onMoveEnd && this.onMoveEnd(this), 180); }
+    _emitMove() { this.onMove && this.onMove(this); clearTimeout(this._moveEndT); this._moveEndT = setTimeout(() => this.onMoveEnd && this.onMoveEnd(this), 180); }
 
     /* ---- Google Maps como mapa base: Google maneja gestos y dibujo del fondo; este canvas dibuja encima ---- */
     attachGoogle(gm) {
@@ -125,8 +125,8 @@
       return t.st === 2 ? t : null;
     }
     _pump() {
-      while (this.inflight < (this.queue.length ? 12 : 5) && (this.queue.length || this.low.length)) {
-        const t = this.queue.length ? this.queue.pop() : this.low.pop();
+      while (this.inflight < 8 && this.queue.length) {
+        const t = this.queue.pop();
         if (t.st !== 0) continue;
         if (t.f < this.frame - 2) { this.tiles.delete(t.key); continue; } // ya no se ve
         t.st = 1; this.inflight++;
@@ -142,17 +142,15 @@
             if (b) { img._b = URL.createObjectURL(b); img.src = img._b; }
             else if (navigator.serviceWorker && navigator.serviceWorker.controller) img.src = url;  // el service worker ya lo guarda
             else {
-              // sin service worker (app Android): una sola descarga que se guarda y se muestra
-              fetch(url, { mode: 'cors' }).then(r => { if (!r.ok) throw 0; caches.open('tiles-v1').then(c => c.put(url, r.clone())).catch(() => { }); return r.blob(); })
-                .then(b => { img._b = URL.createObjectURL(b); img.src = img._b; }).catch(() => { img.src = url; });
+              img.src = url;  // una sola descarga; el navegador de la app ya guarda en su caché lo visto (el mapa descargado sin conexión se guarda aparte)
             }
           }).catch(() => { img.src = url; });
         } else img.src = url;
       }
     }
     _evict() {
-      if (this.tiles.size < 900) return;
-      let n = this.tiles.size - 650;
+      if (this.tiles.size < 600) return;
+      let n = this.tiles.size - 420;
       for (const [k, t] of this.tiles) { if (n <= 0) break; if (t.f < this.frame - 1 && t.st !== 1) { this.tiles.delete(k); n--; } }
     }
     _drawTiles(ctx) {
@@ -163,7 +161,7 @@
       const x0 = Math.floor(b.x0 * n), x1 = Math.floor(b.x1 * n), y0 = Math.max(0, Math.floor(b.y0 * n)), y1 = Math.min(n - 1, Math.floor(b.y1 * n));
       if ((x1 - x0 + 1) * (y1 - y0 + 1) > 120) return;
       this.frame++;
-      const now = performance.now(); let fading = false, miss = 0;
+      const now = performance.now(); let miss = 0;
       const old = this.old && now - this.old.t < 6000 ? this.old : (this.old = null);
       // pinta lo que haya de relleno: mosaicos del mapa anterior (mismo nivel) o el "padre" más cercano en memoria
       const under = (wx, y, dx, dy, sz) => {
@@ -182,24 +180,11 @@
         const wx = ((x % n) + n) % n;
         const dx = (x / n - this.cx) * this.s + this.w / 2, dy = (y / n - this.cy) * this.s + this.h / 2, sz = size + 0.6;
         const t = this._getTile(zi, wx, y, true);
-        if (t) {
-          const a = Math.min(1, (now - t.at) / 170);
-          if (a < 1) { under(wx, y, dx, dy, sz); ctx.globalAlpha = a; fading = true; }
-          ctx.drawImage(t.img, dx, dy, sz, sz); ctx.globalAlpha = 1; continue;
-        }
+        if (t) { ctx.drawImage(t.img, dx, dy, sz, sz); continue; }
         miss++; under(wx, y, dx, dy, sz);
-        if (zi > 0) this._getTile(zi - 1, Math.floor(wx / 2), Math.floor(y / 2), true, true);  // el padre llega rápido y evita huecos al alejar
       }
       ctx.filter = 'none'; ctx.globalAlpha = 1;
-      // precarga un anillo de mosaicos alrededor de la pantalla (cuando no hay nada pendiente)
-      if (!miss && !this.anim && !this.inertia && this.queue.length === 0) {
-        for (let y = y0 - 1; y <= y1 + 1; y++) for (let x = x0 - 1; x <= x1 + 1; x++) {
-          if (y < 0 || y >= n || (x >= x0 && x <= x1 && y >= y0 && y <= y1)) continue;
-          this._getTile(zi, ((x % n) + n) % n, y, true, true);
-        }
-      }
       if (old && !miss) this.old = null;
-      if (fading || (old && miss)) this.invalidate();
       this._pump(); this._evict();
     }
 
