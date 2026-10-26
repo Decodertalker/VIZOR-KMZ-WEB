@@ -264,3 +264,12 @@ select.sel{width:100%;height:48px;border-radius:13px;border:1px solid var(--line
 #mLive.live::before{content:'';width:9px;height:9px;border-radius:50%;background:#e5173f;box-shadow:0 0 0 2px #fff;margin-right:6px;animation:mlp 1s infinite}
 @keyframes mlp{50%{opacity:.25}}
 #mLive span{color:inherit}
+
+/* Fluidez: mientras el mapa se mueve se quita el desenfoque (cuesta mucho en celulares) */
+body.mv .glass,body.mv .pill,body.mv .scrim{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+body.mv .glass{background:var(--solid)}
+.glass,.pill,.btn,.icon-btn,.card,.opt,.chip{-webkit-tap-highlight-color:transparent}
+.icon-btn,.btn,.card,.chip{transition:transform .14s cubic-bezier(.2,.8,.3,1),background-color .18s,border-color .18s,opacity .18s}
+.icon-btn:active,.card:active,.chip:active{transform:scale(.95)}
+#modalRoot>*,#modalRoot .modal{will-change:transform,opacity}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}

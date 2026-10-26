@@ -14,7 +14,7 @@
       this.cx = mxOf(-86.2); this.cy = myOf(13.5); this.z = 9;
       this.minZ = 4; this.maxZ = 21;
       this.w = 0; this.h = 0; this.dpr = 1; this.s = TS * 512;
-      this.src = null; this.tiles = new Map(); this.queue = []; this.inflight = 0; this.frame = 0;
+      this.src = null; this.tiles = new Map(); this.queue = []; this.low = []; this.old = null; this.zt = null; this.inflight = 0; this.frame = 0;
       this.bg = '#0b1220'; this.grid = 'rgba(255,255,255,.04)';
       this.vec = null; this.onNetBad = null; this._fails = 0; this._okAt = 0;
       this.lock = null; this.onDraw = null; this.onTap = null; this.onMove = null; this.onMoveEnd = null; this.onUserMove = null;
@@ -52,6 +52,7 @@
       this.cx = wx - (px - this.w / 2) / this.s; this.cy = wy - (py - this.h / 2) / this.s;
       this._fixCenter(); this._push(); this.invalidate(); this._emitMove();
     }
+    smoothZoom(px, py, nz) { this.anim = null; this.inertia = null; this.zt = { px, py, z: clamp(nz, this.minZ, this.maxZ) }; this._zl = 0; this._schedule(); }
     /* Vuela a un punto; `yFrac` = posición vertical (0..1) en que debe quedar el punto */
     flyTo(lat, lon, z, yFrac, dur) {
       z = clamp(z == null ? this.z : z, this.minZ, this.maxZ);
@@ -70,7 +71,7 @@
       const zy = Math.log2((this.h - pad * 2) / (TS * Math.max(y1 - y0, 1e-9)));
       this.setView(latOf((y0 + y1) / 2), lonOf((x0 + x1) / 2), Math.min(zx, zy, 18));
     }
-    _emitMove() { this.onMove && this.onMove(this); clearTimeout(this._moveEndT); this._moveEndT = setTimeout(() => this.onMoveEnd && this.onMoveEnd(this), 180); }
+    _emitMove() { const bd = document.body; if (bd && !bd.classList.contains('mv')) bd.classList.add('mv'); clearTimeout(this._mvT); this._mvT = setTimeout(() => bd && bd.classList.remove('mv'), 180); this.onMove && this.onMove(this); clearTimeout(this._moveEndT); this._moveEndT = setTimeout(() => this.onMoveEnd && this.onMoveEnd(this), 180); }
 
     /* ---- Google Maps como mapa base: Google maneja gestos y dibujo del fondo; este canvas dibuja encima ---- */
     attachGoogle(gm) {
@@ -104,30 +105,33 @@
 
     /* ---- mapa base ---- */
     setSource(src) {
-      this.src = src; this.tiles.clear(); this.queue = []; this.invalidate();
+      if (this.src && this.tiles.size) { this.old = { src: this.src, tiles: this.tiles, t: performance.now() }; }
+      this.src = src; this.tiles = new Map(); this.queue = []; this.low = []; this.invalidate();
     }
     _tileUrl(z, x, y) { return this.src.url.replace('{z}', z).replace('{x}', x).replace('{y}', y); }
-    _getTile(z, x, y, want) {
+    _getTile(z, x, y, want, low) {
       const key = z + '/' + x + '/' + y;
       let t = this.tiles.get(key);
       if (!t) {
         if (!want) return null;
-        t = { key, z, x, y, st: 0, img: null, fail: 0, f: this.frame };
-        this.tiles.set(key, t); this.queue.push(t);
+        t = { key, z, x, y, st: 0, img: null, fail: 0, f: this.frame, at: 0 };
+        this.tiles.set(key, t); (low ? this.low : this.queue).push(t);
       } else if (want) {
         t.f = this.frame;
-        if (t.st === 3 && performance.now() - t.fail > 20000) { t.st = 0; this.queue.push(t); }
+        if (t.st === 0 && !low && t.low) { t.low = false; this.queue.push(t); }
+        if (t.st === 3 && performance.now() - t.fail > 20000) { t.st = 0; (low ? this.low : this.queue).push(t); }
       }
+      if (low && t.st === 0) t.low = true;
       return t.st === 2 ? t : null;
     }
     _pump() {
-      while (this.inflight < 8 && this.queue.length) {
-        const t = this.queue.pop();
+      while (this.inflight < (this.queue.length ? 12 : 5) && (this.queue.length || this.low.length)) {
+        const t = this.queue.length ? this.queue.pop() : this.low.pop();
         if (t.st !== 0) continue;
         if (t.f < this.frame - 2) { this.tiles.delete(t.key); continue; } // ya no se ve
         t.st = 1; this.inflight++;
         const img = new Image(); img.crossOrigin = 'anonymous'; img.decoding = 'async';
-        img.onload = () => { this._fails = 0; this._okAt = performance.now(); if (img._b) URL.revokeObjectURL(img._b); t.st = 2; t.img = img; this.inflight--; this.invalidate(); this._pump(); };
+        img.onload = () => { this._fails = 0; this._okAt = performance.now(); if (img._b) URL.revokeObjectURL(img._b); t.st = 2; t.img = img; t.at = performance.now(); this.inflight--; this.invalidate(); this._pump(); };
         img.onerror = () => {
           t.st = 3; t.fail = performance.now(); this.inflight--; this._pump();
           if (++this._fails >= 8 && performance.now() - this._okAt > 8000) { this._fails = 0; this.onNetBad && this.onNetBad(); }
@@ -136,18 +140,19 @@
         if (window.caches) {
           caches.open('tiles-v1').then(c => c.match(url, { ignoreVary: true })).then(r => r ? r.blob() : null).then(b => {
             if (b) { img._b = URL.createObjectURL(b); img.src = img._b; }
+            else if (navigator.serviceWorker && navigator.serviceWorker.controller) img.src = url;  // el service worker ya lo guarda
             else {
-              img.src = url;
-              if (!(navigator.serviceWorker && navigator.serviceWorker.controller))
-                fetch(url, { mode: 'cors' }).then(r => r.ok && caches.open('tiles-v1').then(c => c.put(url, r))).catch(() => { });
+              // sin service worker (app Android): una sola descarga que se guarda y se muestra
+              fetch(url, { mode: 'cors' }).then(r => { if (!r.ok) throw 0; caches.open('tiles-v1').then(c => c.put(url, r.clone())).catch(() => { }); return r.blob(); })
+                .then(b => { img._b = URL.createObjectURL(b); img.src = img._b; }).catch(() => { img.src = url; });
             }
           }).catch(() => { img.src = url; });
         } else img.src = url;
       }
     }
     _evict() {
-      if (this.tiles.size < 700) return;
-      let n = this.tiles.size - 500;
+      if (this.tiles.size < 900) return;
+      let n = this.tiles.size - 650;
       for (const [k, t] of this.tiles) { if (n <= 0) break; if (t.f < this.frame - 1 && t.st !== 1) { this.tiles.delete(k); n--; } }
     }
     _drawTiles(ctx) {
@@ -158,19 +163,43 @@
       const x0 = Math.floor(b.x0 * n), x1 = Math.floor(b.x1 * n), y0 = Math.max(0, Math.floor(b.y0 * n)), y1 = Math.min(n - 1, Math.floor(b.y1 * n));
       if ((x1 - x0 + 1) * (y1 - y0 + 1) > 120) return;
       this.frame++;
-      if (src.filter) ctx.filter = src.filter;
+      const now = performance.now(); let fading = false, miss = 0;
+      const old = this.old && now - this.old.t < 6000 ? this.old : (this.old = null);
+      // pinta lo que haya de relleno: mosaicos del mapa anterior (mismo nivel) o el "padre" más cercano en memoria
+      const under = (wx, y, dx, dy, sz) => {
+        if (old) {
+          const o = old.tiles.get(zi + '/' + wx + '/' + y);
+          if (o && o.st === 2) { ctx.filter = old.src.filter || 'none'; ctx.drawImage(o.img, dx, dy, sz, sz); ctx.filter = src.filter || 'none'; return true; }
+        }
+        for (let d = 1; d <= 5 && zi - d >= 0; d++) {
+          const k = Math.pow(2, d), p = this._getTile(zi - d, Math.floor(wx / k), Math.floor(y / k), false);
+          if (p) { const ss = TS / k; ctx.drawImage(p.img, (wx % k) * ss, (y % k) * ss, ss, ss, dx, dy, sz, sz); return true; }
+        }
+        return false;
+      };
+      ctx.filter = src.filter || 'none';
       for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
         const wx = ((x % n) + n) % n;
-        const dx = (x / n - this.cx) * this.s + this.w / 2, dy = (y / n - this.cy) * this.s + this.h / 2;
+        const dx = (x / n - this.cx) * this.s + this.w / 2, dy = (y / n - this.cy) * this.s + this.h / 2, sz = size + 0.6;
         const t = this._getTile(zi, wx, y, true);
-        if (t) { ctx.drawImage(t.img, dx, dy, size + 0.6, size + 0.6); continue; }
-        // mientras carga, usa el mosaico "padre" más cercano que ya esté en memoria
-        for (let d = 1; d <= 4 && zi - d >= 0; d++) {
-          const k = Math.pow(2, d), p = this._getTile(zi - d, Math.floor(wx / k), Math.floor(y / k), false);
-          if (p) { const ss = TS / k; ctx.drawImage(p.img, (wx % k) * ss, (y % k) * ss, ss, ss, dx, dy, size + 0.6, size + 0.6); break; }
+        if (t) {
+          const a = Math.min(1, (now - t.at) / 170);
+          if (a < 1) { under(wx, y, dx, dy, sz); ctx.globalAlpha = a; fading = true; }
+          ctx.drawImage(t.img, dx, dy, sz, sz); ctx.globalAlpha = 1; continue;
+        }
+        miss++; under(wx, y, dx, dy, sz);
+        if (zi > 0) this._getTile(zi - 1, Math.floor(wx / 2), Math.floor(y / 2), true, true);  // el padre llega rápido y evita huecos al alejar
+      }
+      ctx.filter = 'none'; ctx.globalAlpha = 1;
+      // precarga un anillo de mosaicos alrededor de la pantalla (cuando no hay nada pendiente)
+      if (!miss && !this.anim && !this.inertia && this.queue.length === 0) {
+        for (let y = y0 - 1; y <= y1 + 1; y++) for (let x = x0 - 1; x <= x1 + 1; x++) {
+          if (y < 0 || y >= n || (x >= x0 && x <= x1 && y >= y0 && y <= y1)) continue;
+          this._getTile(zi, ((x % n) + n) % n, y, true, true);
         }
       }
-      ctx.filter = 'none';
+      if (old && !miss) this.old = null;
+      if (fading || (old && miss)) this.invalidate();
       this._pump(); this._evict();
     }
 
@@ -190,6 +219,12 @@
         this.cx -= i.vx * dt / this.s; this.cy -= i.vy * dt / this.s; this._fixCenter();
         const f = Math.pow(0.94, dt / 16); i.vx *= f; i.vy *= f; this._dirty = true; this._emitMove();
         if (Math.abs(i.vx) + Math.abs(i.vy) < 0.02) this.inertia = null; else busy = true;
+      }
+      if (this.zt) {
+        const q = this.zt, dt = Math.min(now - (this._zl || now), 50); this._zl = now;
+        const dz = q.z - this.z;
+        if (Math.abs(dz) < 0.004) { this.zoomAt(q.px, q.py, q.z); this.zt = null; this._zl = 0; }
+        else { this.zoomAt(q.px, q.py, this.z + dz * (1 - Math.exp(-Math.max(dt, 8) / 75))); busy = true; }
       }
       if (this._dirty) { this._dirty = false; this._render(); }
       if (busy) this._schedule();
@@ -214,7 +249,7 @@
     }
     _resize() {
       const p = this.cv.parentElement || this.cv, r = p.getBoundingClientRect();
-      this.dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+      this.dpr = Math.min(window.devicePixelRatio || 1, 2);
       this.w = Math.max(1, Math.round(r.width)); this.h = Math.max(1, Math.round(r.height));
       this.cv.width = Math.round(this.w * this.dpr); this.cv.height = Math.round(this.h * this.dpr);
       this.cv.style.width = this.w + 'px'; this.cv.style.height = this.h + 'px';
@@ -232,7 +267,7 @@
       };
       cv.addEventListener('pointerdown', e => {
         cv.setPointerCapture(e.pointerId); const p = pos(e); P.set(e.pointerId, p);
-        this.anim = null; this.inertia = null;
+        this.anim = null; this.inertia = null; this.zt = null;
         this.onUserMove && this.onUserMove();
         if (P.size === 1) { moved = 0; t0 = performance.now(); v = { x: 0, y: 0, t: t0 }; }
         if (P.size === 2) {
@@ -267,7 +302,7 @@
           const now = performance.now();
           if (moved < 10 && now - t0 < 500) {
             if (now - lastTap.t < 320 && Math.hypot(p.x - lastTap.x, p.y - lastTap.y) < 30) {
-              this.zoomAt(p.x, p.y, this.z + 1); lastTap.t = 0;
+              this.smoothZoom(p.x, p.y, Math.round(this.z) + 1); lastTap.t = 0;
             } else { lastTap = { t: now, x: p.x, y: p.y }; this.onTap && this.onTap(p.x, p.y); }
           } else if (now - v.t < 80 && Math.hypot(v.x, v.y) > 0.25) {
             this.inertia = { vx: v.x, vy: v.y, t: 0 }; this._schedule();
@@ -279,7 +314,7 @@
       cv.addEventListener('wheel', e => {
         e.preventDefault(); const p = pos(e);
         this.onUserMove && this.onUserMove();
-        this.zoomAt(p.x, p.y, this.z - e.deltaY * (e.ctrlKey ? 0.02 : 0.0025));
+        this.smoothZoom(p.x, p.y, (this.zt ? this.zt.z : this.z) - e.deltaY * (e.ctrlKey ? 0.02 : 0.0025));
       }, { passive: false });
     }
   }

@@ -54,3 +54,9 @@ Medir (icono de regla) ahora tiene dos botones nuevos:
 - "Punto con mi GPS": agrega un punto del trazado en tu ubicación actual.
 - "Medir en vivo": camina y la app va marcando puntos con el GPS (cada pocos metros) y suma el metraje; la pantalla se mantiene encendida. "Detener" lo termina.
 Se ignoran lecturas con precisión peor a ±40 m. Los puntos manuales en el mapa siguen funcionando.
+
+=== VERSION 2.8: MAPA MÁS RÁPIDO Y FLUIDO ===
+- Satélite: ya no aparece "Map data not yet available". Esri solo tiene imágenes hasta cierto nivel; más allá se amplía la imagen disponible.
+- Al cambiar de mapa o hacer zoom no se ve gris/blanco: se muestra lo anterior mientras llegan los mosaicos nuevos, con aparición suave.
+- Zoom suave con rueda/doble toque, carga adelantada de mosaicos vecinos, más descargas en paralelo y una sola descarga por mosaico en Android.
+- Se quita el desenfoque de los paneles mientras se mueve el mapa y se limita la resolución del dibujo a 2x.

@@ -47,7 +47,7 @@
   const BASES = {
     dark: { label: 'Oscuro', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', maxZoom: 19, filter: 'invert(1) hue-rotate(180deg) brightness(.92) contrast(.95) saturate(.8)', attr: '© OpenStreetMap', bg: '#0b1220', grid: 'rgba(255,255,255,.045)' },
     light: { label: 'Calles', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', maxZoom: 19, attr: '© OpenStreetMap', bg: '#e9edf2', grid: 'rgba(20,30,50,.06)' },
-    sat: { label: 'Satélite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maxZoom: 19, attr: 'Esri, Maxar, Earthstar Geographics', bg: '#101820', grid: 'rgba(255,255,255,.05)' },
+    sat: { label: 'Satélite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maxZoom: 17, attr: 'Esri, Maxar, Earthstar Geographics', bg: '#101820', grid: 'rgba(255,255,255,.05)' },
     gmap: { label: 'Google Maps · Mapa', google: true, gtype: 'roadmap', attr: '' },
     gsat: { label: 'Google Maps · Satélite', google: true, gtype: 'hybrid', attr: '' },
     vec: { label: 'Calles sin conexión', vector: true, attr: '© OpenStreetMap · Protomaps' },
@@ -942,7 +942,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v2.7 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v2.8 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {
