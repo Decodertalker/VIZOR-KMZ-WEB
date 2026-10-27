@@ -79,3 +79,10 @@ Se mantienen: satélite sin pantalla gris (se amplía la imagen disponible), fon
   · Android 13 o superior pregunta el permiso de notificaciones la primera vez que el técnico inicia sesión: hay que aceptarlo.
   · Algunos fabricantes (Xiaomi, Huawei, Samsung…) detienen las apps en segundo plano: conviene dejar la batería de la app en "Sin restricciones".
 PASO OBLIGATORIO: ejecutar 6_notificaciones.sql en Supabase.
+
+=== VERSION 3.2: FILTRO "RUTAS DE EVALUACIÓN" ===
+- Menú Mapa y capas: nuevo filtro de rutas de evaluación para no saturar el mapa.
+- Administrador: apagado por defecto. Elige qué técnicos ver (cada uno con su color de ruta), "Sin asignar" o "Mostrar todas". Se apaga al recargar la página.
+- Técnico: encendido por defecto, muestra solo su ruta y sus evaluaciones ("Mis evaluaciones y ruta"); puede apagarlo.
+- "Ver en el mapa" desde una evaluación enciende automáticamente ese grupo para el administrador.
+- No requiere SQL nuevo.

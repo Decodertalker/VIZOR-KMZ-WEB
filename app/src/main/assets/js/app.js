@@ -44,6 +44,25 @@
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ layers: S.layers, base: S.base, theme: S.theme, themeMode: S.themeMode, radius: S.radius, gkey: S.gkey || '' })); } catch (e) { }
   }
 
+  /* ---- capa "Rutas de evaluación": apagada para el administrador (elige técnicos), encendida para el técnico ---- */
+  S.evShow = new Set();
+  const RCOL = ['#ff5d8f', '#22c55e', '#38bdf8', '#ffb547', '#a78bfa', '#f97316', '#14b8a6', '#eab308'];
+  const evAdmin = () => { const u = Cloud.user(); return !!(u && u.role === 'admin'); };
+  const evKey = e => e.asg || 'none';
+  function evVisible(e) {
+    if (evAdmin()) return S.evShow.has(evKey(e)) || !!(S.routeView && e.asg === S.routeView.tech);
+    return S.layers.evals !== false;
+  }
+  function evRoutes() {   // [{stops, color, fromPos}]
+    const me = Cloud.user(), out = [];
+    const stops = id => S.evals.filter(e => e.asg === id && e.estado !== 'hecha' && e.lat != null).sort((a, b) => (a.seq || 1e9) - (b.seq || 1e9));
+    if (evAdmin()) {
+      const ids = new Set(S.evShow); if (S.routeView) ids.add(S.routeView.tech); ids.delete('none');
+      let i = 0; for (const id of ids) { const s = stops(id); if (s.length) out.push({ stops: s, color: RCOL[i % RCOL.length], fromPos: false }); i++; }
+    } else if (S.layers.evals !== false && me) { const s = stops(me.id); if (s.length) out.push({ stops: s, color: RCOL[0], fromPos: true }); }
+    return out;
+  }
+
   const BASES = {
     dark: { label: 'Oscuro', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', maxZoom: 19, filter: 'invert(1) hue-rotate(180deg) brightness(.92) contrast(.95) saturate(.8)', attr: '© OpenStreetMap', bg: '#0b1220', grid: 'rgba(255,255,255,.045)' },
     light: { label: 'Calles', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', maxZoom: 19, attr: '© OpenStreetMap', bg: '#e9edf2', grid: 'rgba(20,30,50,.06)' },
@@ -423,17 +442,16 @@
     }
     // evaluaciones técnicas pendientes
     if (S.evals.length && z >= 11) {
-      const rs = routeStops();
-      if (rs.length) {
+      for (const R of evRoutes()) {
         ctx.beginPath(); let first = true;
-        if (!S.routeView && S.pos) { const st = m.toScreen(S.pos.lat, S.pos.lon); ctx.moveTo(st[0], st[1]); first = false; }
-        rs.forEach(e => { const [x, y] = m.toScreen(e.lat, e.lon); if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y); });
-        ctx.setLineDash([9, 7]); ctx.strokeStyle = '#ff5d8f'; ctx.lineWidth = 3; ctx.stroke(); ctx.setLineDash([]);
+        if (R.fromPos && S.pos) { const st = m.toScreen(S.pos.lat, S.pos.lon); ctx.moveTo(st[0], st[1]); first = false; }
+        R.stops.forEach(e => { const [x, y] = m.toScreen(e.lat, e.lon); if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y); });
+        ctx.setLineDash([9, 7]); ctx.strokeStyle = R.color; ctx.lineWidth = 3; ctx.stroke(); ctx.setLineDash([]);
       }
       ctx.font = '700 11.5px ui-rounded,system-ui,sans-serif'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
       const rr = z < 14 ? 7 : 11;
       for (const e of S.evals) {
-        if (e.lat == null || e.estado === 'hecha') continue;
+        if (e.lat == null || e.estado === 'hecha' || !evVisible(e)) continue;
         const [x, y] = m.toScreen(e.lat, e.lon); if (x < -30 || y < -30 || x > m.w + 30 || y > m.h + 30) continue;
         ctx.beginPath(); ctx.moveTo(x, y - rr - 3); ctx.lineTo(x + rr + 3, y); ctx.lineTo(x, y + rr + 3); ctx.lineTo(x - rr - 3, y); ctx.closePath();
         ctx.fillStyle = e.tipo === 'Daño' ? '#ff5252' : '#ff5d8f'; ctx.fill(); ctx.lineWidth = 2.2; ctx.strokeStyle = '#fff'; ctx.stroke();
@@ -942,11 +960,24 @@
       const on = k => k === 'auto' ? (S.themeMode === 'auto' && (S.base === 'dark' || S.base === 'light')) : (k === 'dark' || k === 'light') ? (S.themeMode !== 'auto' && S.base === k) : S.base === k;
       m.querySelector('#lyB').innerHTML = keys.map(k => '<button class="opt' + (on(k) ? ' on' : '') + '" data-b="' + k + '"><span class="rad"></span><div><b>' + lab(k) + '</b>' + sub(k) + '</div></button>').join('');
       const L = [['cajas', 'Cajas y nodos'], ['areas', 'Áreas de cobertura'], ['rutas', 'Rutas de fibra'], ['etiquetas', 'Nombres de las cajas']];
-      m.querySelector('#lyL').innerHTML = L.map(l => '<button class="opt' + (S.layers[l[0]] ? ' on' : '') + '" data-l="' + l[0] + '"><b>' + l[1] + '</b><span class="sw"></span></button>').join('');
+      let h = L.map(l => '<button class="opt' + (S.layers[l[0]] ? ' on' : '') + '" data-l="' + l[0] + '"><b>' + l[1] + '</b><span class="sw"></span></button>').join('');
+      if (!evAdmin()) h += '<button class="opt' + (S.layers.evals !== false ? ' on' : '') + '" data-l="evals"><b>Mis evaluaciones y ruta</b><span class="sw"></span></button>';
+      else {
+        h += '<div class="sep"></div><p class="lead" style="margin:6px 0">Rutas de evaluación · elige qué técnicos ver (apagado por defecto)</p>';
+        h += '<button class="opt' + (S.evShow.has('none') ? ' on' : '') + '" data-ev="none"><b>Sin asignar</b><span class="sw"></span></button>';
+        h += techList.map(u => '<button class="opt' + (S.evShow.has(u.id) ? ' on' : '') + '" data-ev="' + esc(u.id) + '"><b>' + esc(u.name) + '</b><span class="sw"></span></button>').join('');
+        if (!techList.length) h += '<p class="lead" style="margin:6px 0">No hay técnicos activos.</p>';
+        else h += '<button class="btn small ghost" data-evall="1" style="margin-top:8px">' + (S.evShow.size ? 'Ocultar todas' : 'Mostrar todas') + '</button>';
+      }
+      m.querySelector('#lyL').innerHTML = h;
     };
+    let techList = [];
+    if (evAdmin()) Cloud.listUsers().then(us => { techList = us.filter(u => u.role === 'tecnico' && u.active !== false); render(); }).catch(() => { });
     render();
     m.onclick = e => {
-      const b = e.target.closest('[data-b]'), l = e.target.closest('[data-l]');
+      const b = e.target.closest('[data-b]'), l = e.target.closest('[data-l]'), ev = e.target.closest('[data-ev]'), ea = e.target.closest('[data-evall]');
+      if (ev) { const k = ev.dataset.ev; S.evShow.has(k) ? S.evShow.delete(k) : S.evShow.add(k); map.invalidate(); render(); }
+      if (ea) { if (S.evShow.size) S.evShow.clear(); else { techList.forEach(u => S.evShow.add(u.id)); } map.invalidate(); render(); }
       if (b) {
         const k = b.dataset.b;
         // elegir un mapa a mano siempre se respeta: se descarta el aviso automático de "sin conexión"
@@ -956,7 +987,7 @@
         else { S.base = k; applyBase(); }
         saveSettings(); render();
       }
-      if (l) { S.layers[l.dataset.l] = !S.layers[l.dataset.l]; saveSettings(); map.invalidate(); render(); }
+      if (l) { const k = l.dataset.l; S.layers[k] = k === 'evals' ? S.layers.evals === false : !S.layers[k]; saveSettings(); map.invalidate(); render(); }
     };
   };
 
@@ -980,7 +1011,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.1 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.2 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {
@@ -1199,7 +1230,7 @@
   function hitEval(px, py) {
     let best = null, bd = 26 * 26;
     for (const e of S.evals) {
-      if (e.lat == null || e.estado === 'hecha' || map.z < 11) continue;
+      if (e.lat == null || e.estado === 'hecha' || map.z < 11 || !evVisible(e)) continue;
       const [x, y] = map.toScreen(e.lat, e.lon), d = (x - px) * (x - px) + (y - py) * (y - py);
       if (d < bd) { bd = d; best = e; }
     }
@@ -1356,7 +1387,7 @@
     hydrate(m);
     const $$ = s => m.querySelector(s);
     $$('#evW').onclick = () => openExt('waze://?ll=' + e.lat + ',' + e.lon + '&navigate=yes', 'https://waze.com/ul?ll=' + e.lat + ',' + e.lon + '&navigate=yes&zoom=17');
-    $$('#evMap').onclick = () => { closeModal(); const f = e.caja ? S.pts.find(p => p.n === e.caja) : null; if (f && (e.cajaD || 0) <= 300) select(f, true); else setPin(e.lat, e.lon); };
+    $$('#evMap').onclick = () => { closeModal(); if (evAdmin()) S.evShow.add(evKey(e)); const f = e.caja ? S.pts.find(p => p.n === e.caja) : null; if (f && (e.cajaD || 0) <= 300) select(f, true); else setPin(e.lat, e.lon); };
     $$('#evTel').onclick = () => openExt('tel:' + (e.contacto || '').replace(/[^\d+]/g, ''));
     $$('#evWa').onclick = () => openExt('https://wa.me/' + (digits.length === 8 ? '505' + digits : digits));
     $$('#evOk').onclick = async () => { e.estado = e.estado === 'hecha' ? 'pend' : 'hecha'; e.nota = $$('#evN').value.trim(); e.ts = Date.now(); await saveEvals(); map.invalidate(); toast(e.estado === 'hecha' ? 'Evaluación marcada como hecha' : 'Evaluación reabierta'); openEvalDetail(e); };
@@ -1879,7 +1910,7 @@
       return false;
     };
     setInterval(autoTheme, 60000);
-    window.__app = { syncNow, removeFeats, zoneOf, teamRefresh, sunTimes, autoTheme, S, map, select, openForm, setPin, openEvals, openEvalDetail, importEvalRows };
+    window.__app = { syncNow, removeFeats, zoneOf, teamRefresh, sunTimes, autoTheme, S, map, select, openForm, setPin, openEvals, openEvalDetail, importEvalRows, evVisible, evRoutes };
   }
   boot();
 })();
