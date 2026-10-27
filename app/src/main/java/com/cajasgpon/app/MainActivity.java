@@ -189,6 +189,21 @@ public class MainActivity extends Activity {
         if (android.os.Build.VERSION.SDK_INT >= 33
                 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
+        } else {
+            askBattery();
+        }
+    }
+
+    /** Una sola vez: pide que Android no frene la app en segundo plano (así llegan los avisos con la pantalla apagada). */
+    private void askBattery() {
+        try {
+            android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+            android.content.SharedPreferences sp = Notifier.prefs(getApplicationContext());
+            if (pm == null || pm.isIgnoringBatteryOptimizations(getPackageName()) || sp.getBoolean("batAsked", false)) return;
+            sp.edit().putBoolean("batAsked", true).apply();
+            Intent i = new Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getPackageName()));
+            startActivity(i);
+        } catch (Throwable ignored) {
         }
     }
 
@@ -200,6 +215,7 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_NOTIF) askBattery();
         if (requestCode == REQ_LOCATION && geoCallback != null) {
             geoCallback.invoke(geoOrigin, hasLocationPermission(), false);
             geoCallback = null;
@@ -287,6 +303,7 @@ public class MainActivity extends Activity {
             Notifier.saveAuth(getApplicationContext(), url, key, token, userId);
             Notifier.ensureChannel(getApplicationContext());
             Notifier.schedule(getApplicationContext());
+            Notifier.startService(getApplicationContext());
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
@@ -309,8 +326,28 @@ public class MainActivity extends Activity {
         /** La página detectó asignaciones nuevas: se marcan como avisadas y, si la app no está a la vista, se notifica. */
         @JavascriptInterface
         public void assigned(final String title, final String text, final String idsLines, final boolean show) {
+            boolean fresh = false;
+            java.util.Set<String> known = Notifier.seen(getApplicationContext());
+            if (idsLines != null) for (String id : idsLines.split("\n")) if (id.length() > 0 && !known.contains(id)) fresh = true;
             Notifier.markSeen(getApplicationContext(), idsLines);
-            if (show) Notifier.show(getApplicationContext(), title, text);
+            if (show && fresh) Notifier.show(getApplicationContext(), title, text);
+        }
+
+        /** Botón "Probar notificaciones": revisa permisos, batería y servidor y envía un aviso de prueba. */
+        @JavascriptInterface
+        public void testNotify() {
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    final String msg = Notifier.diagnose(getApplicationContext());
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (web != null) web.evaluateJavascript("window.__nbDiag && window.__nbDiag(" + org.json.JSONObject.quote(msg) + ")", null);
+                        }
+                    });
+                }
+            }).start();
         }
 
         private String clean(String name) {

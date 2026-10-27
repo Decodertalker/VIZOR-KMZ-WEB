@@ -25,6 +25,7 @@ import java.util.Set;
 /** Avisos de evaluaciones asignadas: consulta al servidor en segundo plano y muestra la notificación. */
 final class Notifier {
     static final String CHANNEL = "asignaciones";
+    static final String SVC_CHANNEL = "servicio";
     static final String PREFS = "vizor_native";
     static final int JOB_ID = 4711;
 
@@ -54,11 +55,62 @@ final class Notifier {
 
     static void clearAuth(Context c) {
         prefs(c).edit().clear().apply();
+        stopService(c);
         try {
             JobScheduler js = (JobScheduler) c.getSystemService(Context.JOB_SCHEDULER_SERVICE);
             if (js != null) js.cancel(JOB_ID);
         } catch (Exception ignored) {
         }
+    }
+
+    static void startService(Context c) {
+        try {
+            c.startForegroundService(new Intent(c, PollService.class));
+        } catch (Throwable t) {
+            prefs(c).edit().putString("lastErr", "servicio: " + t.getClass().getSimpleName()).apply();
+        }
+    }
+
+    static void stopService(Context c) {
+        try {
+            c.stopService(new Intent(c, PollService.class));
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** Diagnóstico para el botón "Probar notificaciones". Hace red: llamar fuera del hilo principal. */
+    static String diagnose(Context c) {
+        StringBuilder sb = new StringBuilder();
+        SharedPreferences p = prefs(c);
+        NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
+        boolean notifOk = nm != null && nm.areNotificationsEnabled();
+        sb.append(notifOk ? "✔ Notificaciones permitidas en el teléfono\n" : "✘ Las notificaciones están bloqueadas: Ajustes › Aplicaciones › Vizor G › Notificaciones\n");
+        try {
+            android.os.PowerManager pm = (android.os.PowerManager) c.getSystemService(Context.POWER_SERVICE);
+            boolean ign = pm != null && pm.isIgnoringBatteryOptimizations(c.getPackageName());
+            sb.append(ign ? "✔ Batería sin restricciones\n" : "! Batería optimizada: Ajustes › Aplicaciones › Vizor G › Batería › Sin restricciones\n");
+        } catch (Throwable ignored) {
+        }
+        String url = p.getString("url", ""), key = p.getString("key", ""), token = p.getString("token", "");
+        if (url.length() == 0 || token.length() == 0) {
+            sb.append("✘ Sesión no registrada en el teléfono: cierra sesión y vuelve a entrar\n");
+        } else {
+            try {
+                String res = post(url + "/rest/v1/rpc/cj_my_assignments", key, new JSONObject().put("p_token", token).toString());
+                sb.append("✔ Servidor conectado · ").append(new JSONArray(res).length()).append(" órdenes asignadas pendientes\n");
+            } catch (Exception e) {
+                String m = String.valueOf(e.getMessage());
+                if (m.equals("http_404")) sb.append("✘ Al servidor le falta ejecutar 6_notificaciones.sql en Supabase\n");
+                else if (m.equals("no_session")) sb.append("✘ La sesión caducó: cierra sesión y vuelve a entrar\n");
+                else sb.append("✘ No se pudo consultar el servidor (").append(m).append(")\n");
+            }
+        }
+        String le = p.getString("lastErr", "");
+        if (le.length() > 0) sb.append("Último error de fondo: ").append(le).append("\n");
+        startService(c);
+        sb.append("Se envió una notificación de prueba.");
+        show(c, "Prueba de notificación", "Si ves este aviso, las notificaciones funcionan.");
+        return sb.toString();
     }
 
     /** Programa la revisión periódica (mínimo que permite Android: cada 15 minutos). */
@@ -174,12 +226,13 @@ final class Notifier {
                 }
             }
             boolean baseline = p.getBoolean("baseline", false);
-            p.edit().putStringSet("seen", now).putBoolean("baseline", true).apply();
+            p.edit().putStringSet("seen", now).putBoolean("baseline", true).remove("lastErr").apply();
             if (notify && baseline && fresh > 0) {
                 if (fresh == 1) show(c, "Nueva evaluación asignada", first);
                 else show(c, "Te asignaron " + fresh + " evaluaciones", "Primera: " + first);
             }
         } catch (Exception e) {
+            p.edit().putString("lastErr", String.valueOf(e.getMessage())).apply();
             if ("no_session".equals(e.getMessage())) {
                 p.edit().remove("token").apply();  // la sesión terminó: se vuelve a guardar al iniciar sesión
             }

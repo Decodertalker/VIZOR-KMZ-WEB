@@ -41,7 +41,7 @@
   };
   try { Object.assign(S, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'), { sel: null }); } catch (e) { }
   function saveSettings() {
-    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ layers: S.layers, base: S.base, theme: S.theme, themeMode: S.themeMode, radius: S.radius, gkey: S.gkey || '' })); } catch (e) { }
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ layers: S.layers, base: S.base, theme: S.theme, themeMode: S.themeMode, radius: S.radius, gkey: S.gkey || '', nbMode: S.nbMode, autoOrd: S.autoOrd })); } catch (e) { }
   }
 
   /* ---- capa "Rutas de evaluación": apagada para el administrador (elige técnicos), encendida para el técnico ---- */
@@ -53,9 +53,24 @@
     if (evAdmin()) return S.evShow.has(evKey(e)) || !!(S.routeView && e.asg === S.routeView.tech);
     return S.layers.evals !== false;
   }
+  /* ---- orden por cercanía para el técnico: se recalcula con su GPS (ruta, números y lista) ---- */
+  const evTech = () => { const u = Cloud.user(); return u && u.role !== 'admin' ? u : null; };
+  const autoOrdOn = () => S.autoOrd !== false;
+  let _ord = { t: 0, lat: 0, lon: 0, n: -1, first: '', list: [], map: new Map(), sig: '' };
+  function myOrder() {
+    const me = evTech(); if (!me) return _ord = { t: 0, lat: 0, lon: 0, n: -1, first: '', list: [], map: new Map(), sig: '' };
+    const mine = S.evals.filter(e => e.asg === me.id && e.estado !== 'hecha').sort((a, b) => (a.seq || 1e9) - (b.seq || 1e9));
+    const now = Date.now(), p = S.pos, moved = p ? hav(p.lat, p.lon, _ord.lat, _ord.lon) > 8 : false;
+    if (mine.length === _ord.n && (mine[0] ? mine[0].id : '') === _ord.first && !moved && now - _ord.t < 8000) return _ord;
+    const list = autoOrdOn() ? nearestOrder(mine, p ? { lat: p.lat, lon: p.lon } : null) : mine, mp = new Map(); list.forEach((e, i) => mp.set(e.id, i + 1));
+    const sig = list.map(e => e.id).join(',');
+    _ord = { t: now, lat: p ? p.lat : 0, lon: p ? p.lon : 0, n: mine.length, first: mine[0] ? mine[0].id : '', list, map: mp, sig };
+    return _ord;
+  }
+  const dispSeq = e => { const me = evTech(); if (me && e.asg === me.id) { const n = myOrder().map.get(e.id); if (n) return n; } return e.seq; };
   function evRoutes() {   // [{stops, color, fromPos}]
     const me = Cloud.user(), out = [];
-    const stops = id => S.evals.filter(e => e.asg === id && e.estado !== 'hecha' && e.lat != null).sort((a, b) => (a.seq || 1e9) - (b.seq || 1e9));
+    const stops = id => (me && me.role !== 'admin' && id === me.id) ? myOrder().list.filter(e => e.lat != null) : S.evals.filter(e => e.asg === id && e.estado !== 'hecha' && e.lat != null).sort((a, b) => (a.seq || 1e9) - (b.seq || 1e9));
     if (evAdmin()) {
       const ids = new Set(S.evShow); if (S.routeView) ids.add(S.routeView.tech); ids.delete('none');
       let i = 0; for (const id of ids) { const s = stops(id); if (s.length) out.push({ stops: s, color: RCOL[i % RCOL.length], fromPos: false }); i++; }
@@ -455,7 +470,8 @@
         const [x, y] = m.toScreen(e.lat, e.lon); if (x < -30 || y < -30 || x > m.w + 30 || y > m.h + 30) continue;
         ctx.beginPath(); ctx.moveTo(x, y - rr - 3); ctx.lineTo(x + rr + 3, y); ctx.lineTo(x, y + rr + 3); ctx.lineTo(x - rr - 3, y); ctx.closePath();
         ctx.fillStyle = e.tipo === 'Daño' ? '#ff5252' : '#ff5d8f'; ctx.fill(); ctx.lineWidth = 2.2; ctx.strokeStyle = '#fff'; ctx.stroke();
-        if (e.asg && e.seq != null && z >= 13.5) { ctx.font = '800 11px ui-rounded,system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText(e.seq, x, y + .5); ctx.textAlign = 'start'; ctx.font = '700 11.5px ui-rounded,system-ui,sans-serif'; }
+        const ds = e.asg ? dispSeq(e) : null;
+        if (ds != null && z >= 13.5) { ctx.font = '800 11px ui-rounded,system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText(ds, x, y + .5); ctx.textAlign = 'start'; ctx.font = '700 11.5px ui-rounded,system-ui,sans-serif'; }
         if (z >= 15.5 && e.orden) {
           ctx.lineWidth = 3.5; ctx.strokeStyle = S.base === 'light' || S.theme === 'light' ? 'rgba(255,255,255,.92)' : 'rgba(8,14,26,.9)';
           ctx.strokeText(e.orden, x + rr + 8, y); ctx.fillStyle = COL.text; ctx.fillText(e.orden, x + rr + 8, y);
@@ -625,18 +641,42 @@
   function cardHtml(f, d) {
     return '<button class="card" data-id="' + f.id + '"><div class="row top"><span class="dot ' + kindOf(f) + '"></span><div class="meta"><div class="nm">' + esc(f.n) + '</div><div class="sb">' + esc(subOf(f)) + '</div></div></div><div class="dd">' + fmtD(d).replace(/ (m|km)$/, ' <small>$1</small>') + '</div></button>';
   }
+  let _ordSig = '';
+  function nbOrders() {   // solo técnicos con órdenes asignadas
+    const me = evTech(); return me ? S.evals.some(e => e.asg === me.id && e.estado !== 'hecha') : false;
+  }
   function updateNearby() {
+    const hasO = nbOrders(), ordMode = hasO && S.nbMode === 'ordenes', hd = $('#nearby h2');
+    const modeChips = hasO ? '<button class="chip' + (!ordMode ? ' on' : '') + '" data-m="cajas">Cajas</button><button class="chip' + (ordMode ? ' on' : '') + '" data-m="ordenes">Órdenes</button>' : '';
+    if (hd) hd.textContent = ordMode ? 'Órdenes cercanas' : 'Cajas cercanas';
+    if (ordMode) {
+      const ref = refPoint(), od = myOrder(), list = od.list;
+      $('#nbChips').innerHTML = modeChips + '<button class="chip' + (autoOrdOn() ? ' on' : '') + '" data-oa="1">Orden por cercanía</button>';
+      $('#nbSub').textContent = list.length + (list.length === 1 ? ' pendiente' : ' pendientes') + (autoOrdOn() ? ' · ordenadas desde ' + (ref.gps ? 'tu ubicación, en vivo' : 'el centro del mapa') : ' · en el orden del administrador');
+      $('#nbList').innerHTML = list.map(e => {
+        const d = e.lat != null ? hav(ref.lat, ref.lon, e.lat, e.lon) : null;
+        return '<button class="card" data-ev="' + esc(e.id) + '"><div class="row top"><span style="flex:none;width:24px;height:24px;border-radius:50%;background:#ff5d8f;color:#fff;font:800 12px system-ui;display:grid;place-items:center">' + (od.map.get(e.id) || '') + '</span><div class="meta"><div class="nm">' + esc(e.cliente || e.orden || 'Orden') + '</div><div class="sb">' + esc((e.orden ? e.orden + ' · ' : '') + (e.direccion || e.tipo || '')) + '</div></div></div><div class="dd">' + (d == null ? '<small>sin ubicación</small>' : fmtD(d).replace(/ (m|km)$/, ' <small>$1</small>')) + '</div></button>';
+      }).join('') || '<div class="empty">No tienes órdenes pendientes.</div>';
+      if (od.sig !== _ordSig) { _ordSig = od.sig; map.invalidate(); }
+      return;
+    }
     if (!S.pts.length) return;
     const ref = refPoint(), all = nearest(ref, 60), inR = all.filter(a => a[0] <= S.radius);
     const rl = (RADII.find(r => r[0] === S.radius) || [0, ''])[1];
-    $('#nbChips').innerHTML = RADII.map(r => '<button class="chip' + (r[0] === S.radius ? ' on' : '') + '" data-r="' + r[0] + '">' + r[1] + '</button>').join('');
+    $('#nbChips').innerHTML = modeChips + RADII.map(r => '<button class="chip' + (r[0] === S.radius ? ' on' : '') + '" data-r="' + r[0] + '">' + r[1] + '</button>').join('');
     const list = $('#nbList');
     $('#nbSub').textContent = (inR.length ? inR.length + (inR.length >= 60 ? '+' : '') + ' en ' + rl : 'Ninguna en ' + rl) + (ref.gps ? ' · desde tu ubicación' : ' · desde el centro del mapa');
     if (inR.length) list.innerHTML = inR.slice(0, 40).map(a => cardHtml(a[1], a[0])).join('');
     else list.innerHTML = all.slice(0, 3).map(a => cardHtml(a[1], a[0])).join('') || '<div class="empty">No hay cajas cargadas.</div>';
   }
-  $('#nbChips').onclick = e => { const b = e.target.closest('[data-r]'); if (b) { S.radius = +b.dataset.r; saveSettings(); updateNearby(); } };
-  $('#nbList').onclick = e => { const b = e.target.closest('[data-id]'); if (b) { const f = S.feats.find(x => x.id === +b.dataset.id); if (f) select(f, true); } };
+  $('#nbChips').onclick = e => {
+    const b = e.target.closest('[data-r]'), mo = e.target.closest('[data-m]'), oa = e.target.closest('[data-oa]');
+    if (b) { S.radius = +b.dataset.r; saveSettings(); updateNearby(); }
+    if (mo) { S.nbMode = mo.dataset.m; saveSettings(); updateNearby(); }
+    if (oa) { S.autoOrd = !autoOrdOn(); _ord.t = 0; saveSettings(); updateNearby(); map.invalidate(); }
+  };
+  setInterval(() => { if (nbOrders() && S.nbMode === 'ordenes' && !document.hidden) updateNearby(); }, 10000);
+  $('#nbList').onclick = e => { const ev = e.target.closest('[data-ev]'); if (ev) { const x = S.evals.find(y => y.id === ev.dataset.ev); if (x) openEvalDetail(x); return; } const b = e.target.closest('[data-id]'); if (b) { const f = S.feats.find(x => x.id === +b.dataset.id); if (f) select(f, true); } };
   function dragSheet(grab, onUp, onDown) {
     let y0 = null;
     grab.addEventListener('pointerdown', e => { y0 = e.clientY; });
@@ -1005,13 +1045,14 @@
       ...(cu ? [['user', 'Mi cuenta', cu.name + ' · ' + (cu.role === 'admin' ? 'Administrador' : 'Técnico'), 'acct']] : (Cloud.configured() ? [] : [['user', 'Conectar servidor', 'Activa usuarios, administrador y ubicación del equipo', 'srv']])),
       ['clip', isT ? 'Mis evaluaciones y ruta' : 'Evaluaciones técnicas', nEv ? nEv + ' órdenes · ' + pEv + ' pendientes' : (isT ? 'Aquí aparecen las que te asignen' : 'Carga un Excel con clientes y órdenes'), 'evals'],
       ...(isT ? [] : [['upload', 'Importar KMZ / KML', 'Suma o actualiza cajas desde otro archivo', 'imp'], ['download', 'Exportar KMZ', 'Todo con tus cambios, listo para Google Earth', 'exp']]),
+      ...(isT && NB && NB.testNotify ? [['chat', 'Probar notificaciones', 'Revisa permisos, batería y servidor y envía un aviso de prueba', 'nbtest']] : []),
       ['cloud', 'Guardar mosaicos de esta zona', 'Opcional: fondo en línea guardado para usar sin internet', 'off'],
       ['moon', 'Tema: ' + THEME_LABEL[S.themeMode], 'Toca para cambiar: automático, claro u oscuro', 'theme']
     ];
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.2 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.4 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {
@@ -1022,6 +1063,7 @@
       if (a === 'asig') openAssign();
       if (a === 'sync') { await syncNow(true); toast(SY.err ? 'No se pudo sincronizar: ' + SY.err : 'Sincronizado', 3000); }
       if (a === 'acct') openAccount();
+      if (a === 'nbtest') { toast('Probando…', 1500); try { NB.testNotify(); } catch (e) { toast('No disponible en esta versión', 3000); } }
       if (a === 'srv') openServer();
       if (a === 'imp') $('#fileIn').click();
       if (a === 'exp') openExport();
@@ -1340,7 +1382,7 @@
     const pend = S.evals.filter(e => e.estado !== 'hecha').length, cu = Cloud.user(), adm = isAdmin(), tech = cu && !adm;
     const rt = tech ? myRoute() : [], nx = rt[0];
     const m = modal('<h3>' + (tech ? 'Mis evaluaciones y ruta' : 'Evaluaciones técnicas') + '</h3>' +
-      (rt.length ? '<div class="credbox" style="border-style:solid"><small style="color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-size:11px">Siguiente parada · ' + rt.length + (rt.length === 1 ? ' pendiente' : ' pendientes') + ' en tu ruta</small><br><b style="user-select:none">#' + (nx.seq || 1) + ' · ' + esc(nx.cliente || nx.orden) + '</b><br><span style="color:var(--muted);font-size:13px">' + esc(nx.direccion || '') + '</span><div class="btnrow" style="margin-top:10px"><button class="btn waze small" id="rtGo"' + (nx.lat == null ? ' disabled' : '') + '>' + ic('nav') + 'Ir con Waze</button><button class="btn small" id="rtMap">' + ic('pin') + 'Ver mi ruta</button></div></div>' : '') + '<div class="kpis"><div class="stat"><small>Total</small><b>' + S.evals.length + '</b></div><div class="stat"><small>Pendientes</small><b>' + pend + '</b></div><div class="stat"><small>Hechas</small><b>' + (S.evals.length - pend) + '</b></div></div>' +
+      (rt.length ? '<div class="credbox" style="border-style:solid"><small style="color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-size:11px">Siguiente parada · ' + rt.length + (rt.length === 1 ? ' pendiente' : ' pendientes') + ' en tu ruta</small><br><b style="user-select:none">#' + (dispSeq(nx) || 1) + ' · ' + esc(nx.cliente || nx.orden) + '</b><br><span style="color:var(--muted);font-size:13px">' + esc(nx.direccion || '') + '</span><div class="btnrow" style="margin-top:10px"><button class="btn waze small" id="rtGo"' + (nx.lat == null ? ' disabled' : '') + '>' + ic('nav') + 'Ir con Waze</button><button class="btn small" id="rtMap">' + ic('pin') + 'Ver mi ruta</button></div></div>' : '') + '<div class="kpis"><div class="stat"><small>Total</small><b>' + S.evals.length + '</b></div><div class="stat"><small>Pendientes</small><b>' + pend + '</b></div><div class="stat"><small>Hechas</small><b>' + (S.evals.length - pend) + '</b></div></div>' +
       '<div class="evtools"><button class="btn accent" id="evImp">' + ic('upload') + 'Importar Excel</button><button class="btn" id="evTpl">' + ic('download') + 'Plantilla</button><button class="btn" id="evExp">' + ic('share') + 'Exportar</button></div>' +
       '<div class="evfilter" id="evChips"></div><input class="evsearch" id="evQ" placeholder="Buscar cliente, orden o técnico…" autocomplete="off" value="' + esc(evF.q) + '"><div id="evList"></div>');
     hydrate(m);
@@ -1507,8 +1549,9 @@
     const f = list[0].d, first = (f.cliente || 'Orden ' + (f.orden || '')) + (f.direccion ? ' · ' + f.direccion : '');
     const title = list.length === 1 ? 'Nueva evaluación asignada' : 'Te asignaron ' + list.length + ' evaluaciones', text = list.length === 1 ? first : 'Primera: ' + first;
     toast(title, 4500);
-    try { if (NB && NB.assigned) NB.assigned(title, text, list.map(x => x.u).join('\n'), !!document.hidden); } catch (e) { }
+    try { if (NB && NB.assigned) NB.assigned(title, text, list.map(x => x.u).join('\n'), true); } catch (e) { }
   }
+  window.__nbDiag = msg => { const m = modal('<h3>Notificaciones</h3><p class="lead" style="white-space:pre-line;text-align:left">' + esc(msg) + '</p><button class="btn wide" id="nbX">Cerrar</button>'); m.querySelector('#nbX').onclick = closeModal; };
   const featU2 = f => f.u || (f.src === S.seedName ? 'seed:' + f.id : '');
   function adoptEvals() {
     const me = Cloud.user(); if (!me) return; const pre = me.id.slice(0, 8) + ':';
@@ -1557,9 +1600,10 @@
 
   /* ---------- asignaciones y rutas ---------- */
   S.routeView = null;
-  const myRoute = () => { const me = Cloud.user(); return me ? S.evals.filter(e => e.asg === me.id && e.estado !== 'hecha').sort((a, b) => (a.seq || 1e9) - (b.seq || 1e9)) : []; };
+  const myRoute = () => { const me = Cloud.user(); return me ? (me.role !== 'admin' ? myOrder().list.slice() : S.evals.filter(e => e.asg === me.id && e.estado !== 'hecha').sort((a, b) => (a.seq || 1e9) - (b.seq || 1e9))) : []; };
   function routeStops() {
     const me = Cloud.user(), id = S.routeView ? S.routeView.tech : (me && me.role !== 'admin' ? me.id : null); if (!id) return [];
+    if (me && me.role !== 'admin' && id === me.id) return myOrder().list.filter(e => e.lat != null);
     return S.evals.filter(e => e.asg === id && e.estado !== 'hecha' && e.lat != null).sort((a, b) => (a.seq || 1e9) - (b.seq || 1e9));
   }
   function fitRoute(list) {

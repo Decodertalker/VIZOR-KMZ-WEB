@@ -86,3 +86,9 @@ PASO OBLIGATORIO: ejecutar 6_notificaciones.sql en Supabase.
 - Técnico: encendido por defecto, muestra solo su ruta y sus evaluaciones ("Mis evaluaciones y ruta"); puede apagarlo.
 - "Ver en el mapa" desde una evaluación enciende automáticamente ese grupo para el administrador.
 - No requiere SQL nuevo.
+
+=== VERSION 3.4: ÓRDENES CERCANAS Y AVISOS MÁS CONFIABLES ===
+- Técnico con órdenes asignadas: en el panel inferior aparecen los botones "Cajas" / "Órdenes". En "Órdenes" el panel dice "Órdenes cercanas" y las ordena por distancia desde su GPS, actualizándose cada pocos segundos mientras se mueve. El botón "Orden por cercanía" lo apaga para volver al orden del administrador. La ruta del mapa y los números siguen el mismo orden. El administrador no ve estos botones.
+- Avisos de asignación: ahora la app mantiene un servicio ligero (notificación fija "Atento a nuevas asignaciones") que revisa el servidor cada ~40 s, incluso con la app cerrada o la pantalla apagada. El aviso llega en menos de un minuto.
+- La primera vez Android pide: permiso de notificaciones y "sin restricciones de batería". Hay que aceptar ambos.
+- Menú > "Probar notificaciones" (solo técnicos): revisa permisos, batería y servidor, y envía un aviso de prueba. Si falta ejecutar 6_notificaciones.sql lo indica.
