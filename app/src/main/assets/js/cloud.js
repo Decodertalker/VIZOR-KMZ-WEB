@@ -63,6 +63,9 @@
     } catch (e) { }
   }
 
+  // App Android: se le pasa la sesión del técnico para que pueda avisarle de nuevas asignaciones (también con la app cerrada)
+  function native() { try { const B = g.AndroidBridge; if (B && B.setAuth && ses && ses.user) B.setAuth(cfg.url, cfg.key, ses.token, ses.user.id, ses.user.role); } catch (e) { } }
+
   const api = {
     onExpired: null, errText,
     configured: () => !!(cfg.url && cfg.key),
@@ -74,7 +77,7 @@
     async login(u, p) {
       const r = await rpc('cj_login', { p_user: u, p_pass: p });
       if (r && r.error) { const e = new Error(MSG[r.error] || r.error); e.code = r.error; throw e; }
-      ses = { token: r.token, user: r.user, boot: BOOT }; wr(K_SES, ses); await remember(u, p); return ses;
+      ses = { token: r.token, user: r.user, boot: BOOT }; wr(K_SES, ses); await remember(u, p); native(); return ses;
     },
     // Acceso sin internet: se compara con el último acceso correcto en este dispositivo
     async loginOffline(u, p) {
@@ -82,11 +85,11 @@
       if (!o || o.u !== u || !crypto.subtle) { const e = new Error('Sin conexión. Para entrar sin internet, tu usuario debe haber iniciado sesión antes en este dispositivo'); e.code = 'network'; throw e; }
       const salt = Uint8Array.from(o.salt.match(/../g).map(h => parseInt(h, 16)));
       if ((await pbk(p, salt)) !== o.hash) { const e = new Error(MSG.bad_credentials); e.code = 'bad_credentials'; throw e; }
-      ses = { token: o.token, user: o.user, boot: BOOT }; wr(K_SES, ses); return ses;
+      ses = { token: o.token, user: o.user, boot: BOOT }; wr(K_SES, ses); native(); return ses;
     },
     remember,
     async me() { const u = await rpc('cj_me', { p_token: tk() }); if (ses) { ses.user = u; wr(K_SES, ses); } return u; },
-    async logout() { const t = tk(); ses = null; wr(K_SES, null); wr(K_OFF, null); if (t) { try { await rpc('cj_logout', { p_token: t }, 6000); } catch (e) { } } },
+    async logout() { const t = tk(); try { if (g.AndroidBridge && g.AndroidBridge.clearAuth) g.AndroidBridge.clearAuth(); } catch (e) { } ses = null; wr(K_SES, null); wr(K_OFF, null); if (t) { try { await rpc('cj_logout', { p_token: t }, 6000); } catch (e) { } } },
     async changePassword(o, n) { await rpc('cj_change_password', { p_token: tk(), p_old: o, p_new: n }); if (ses) { ses.user.must_change = false; wr(K_SES, ses); await remember(ses.user.username, n); } },
     commentsList: u => rpc('cj_comments_list', { p_token: tk(), p_eval_u: u }),
     commentAdd: (u, body) => rpc('cj_comment_add', { p_token: tk(), p_eval_u: u, p_body: body }),
@@ -111,4 +114,5 @@
     push: items => rpc('cj_push', { p_token: tk(), p_items: items }, 60000)
   };
   g.Cloud = api;
+  if (ses) native();
 })(window);

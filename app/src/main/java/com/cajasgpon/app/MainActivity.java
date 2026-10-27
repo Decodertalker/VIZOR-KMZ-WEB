@@ -38,6 +38,7 @@ public class MainActivity extends Activity {
     private static final String HOST = "appassets.androidplatform.net";
     private static final int REQ_LOCATION = 11;
     private static final int REQ_FILE = 12;
+    private static final int REQ_NOTIF = 13;
 
     private WebView web;
     private ValueCallback<Uri[]> filePathCallback;
@@ -184,6 +185,13 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void askNotificationPermission() {
+        if (android.os.Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIF);
+        }
+    }
+
     private boolean hasLocationPermission() {
         return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
                 || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
@@ -267,6 +275,42 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String bootId() {
             return BOOT_ID;
+        }
+
+        /** Guarda la sesión del técnico para poder avisarle de nuevas asignaciones aunque la app esté cerrada. */
+        @JavascriptInterface
+        public void setAuth(final String url, final String key, final String token, final String userId, final String role) {
+            if (!"tecnico".equals(role)) {
+                Notifier.clearAuth(getApplicationContext());
+                return;
+            }
+            Notifier.saveAuth(getApplicationContext(), url, key, token, userId);
+            Notifier.ensureChannel(getApplicationContext());
+            Notifier.schedule(getApplicationContext());
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    askNotificationPermission();
+                }
+            });
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    Notifier.poll(getApplicationContext(), false);
+                }
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void clearAuth() {
+            Notifier.clearAuth(getApplicationContext());
+        }
+
+        /** La página detectó asignaciones nuevas: se marcan como avisadas y, si la app no está a la vista, se notifica. */
+        @JavascriptInterface
+        public void assigned(final String title, final String text, final String idsLines, final boolean show) {
+            Notifier.markSeen(getApplicationContext(), idsLines);
+            if (show) Notifier.show(getApplicationContext(), title, text);
         }
 
         private String clean(String name) {

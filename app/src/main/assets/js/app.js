@@ -676,7 +676,8 @@
   function setSheetH() {
     let el = null;
     if (S.pick) el = $('#pickBar'); else if (S.meas.on) el = $('#measureBar'); else el = S.sel ? $('#detail') : S.pin ? $('#pinBar') : $('#nearby');
-    const h = el && !el.hidden ? el.offsetHeight + (el.id === 'detail' || el.id === 'nearby' ? 0 : 14) : 0;
+    let h = el && !el.hidden ? el.offsetHeight + (el.id === 'detail' || el.id === 'nearby' ? 0 : 14) : 0;
+    if (el && el.id === 'measureBar' && el.style.top) h = 0;  // si el cuadro está movido, no empuja los botones del mapa
     document.documentElement.style.setProperty('--sheet-h', Math.max(h, 0) + 'px');
   }
   function layout() {
@@ -816,6 +817,33 @@
   $('#mUndo').onclick = () => { S.meas.pts.pop(); updateMeasure(); };
   $('#mClear').onclick = () => { S.meas.pts = []; updateMeasure(); };
   $('#mDone').onclick = stopMeasure;
+  // El cuadro de medición se puede mover libremente (web con mouse o ventana ancha). La posición se recuerda.
+  (function () {
+    const bar = $('#measureBar'), K = 'cajas.mb.pos', can = () => window.matchMedia('(pointer:fine),(min-width:700px)').matches;
+    let pos = null; try { pos = JSON.parse(localStorage.getItem(K) || 'null'); } catch (e) { }
+    const reset = () => { ['left', 'top', 'right', 'bottom', 'width', 'margin'].forEach(p => bar.style[p] = ''); };
+    const place = () => {
+      if (!can() || !pos || bar.hidden) { if (!pos || !can()) reset(); return; }
+      const par = bar.offsetParent || document.body, pr = par.getBoundingClientRect(), w = Math.min(pos.w || bar.offsetWidth, innerWidth - 8), h = bar.offsetHeight;
+      const x = Math.max(4, Math.min(pos.x, innerWidth - w - 4)), y = Math.max(4, Math.min(pos.y, innerHeight - h - 4));
+      Object.assign(bar.style, { left: (x - pr.left) + 'px', top: (y - pr.top) + 'px', right: 'auto', bottom: 'auto', margin: '0', width: w + 'px' });
+    };
+    let drag = null;
+    bar.addEventListener('pointerdown', e => {
+      if (!can() || e.button > 0 || e.target.closest('button,input,select,textarea,a')) return;
+      const r = bar.getBoundingClientRect(); drag = { dx: e.clientX - r.left, dy: e.clientY - r.top, w: r.width, id: e.pointerId };
+      bar.setPointerCapture(e.pointerId); bar.classList.add('drag'); e.preventDefault();
+    });
+    bar.addEventListener('pointermove', e => {
+      if (!drag || e.pointerId !== drag.id) return;
+      pos = { x: e.clientX - drag.dx, y: e.clientY - drag.dy, w: drag.w }; place();
+    });
+    const end = e => { if (!drag || e.pointerId !== drag.id) return; drag = null; bar.classList.remove('drag'); try { localStorage.setItem(K, JSON.stringify(pos)); } catch (x) { } setSheetH(); };
+    bar.addEventListener('pointerup', end); bar.addEventListener('pointercancel', end);
+    bar.addEventListener('dblclick', e => { if (e.target.closest('button,input')) return; pos = null; try { localStorage.removeItem(K); } catch (x) { } reset(); setSheetH(); });
+    window.addEventListener('resize', place);
+    new MutationObserver(place).observe(bar, { attributes: true, attributeFilter: ['hidden'] });
+  })();
 
   /* ---------- agregar / editar ---------- */
   const fc = v => v === '' || v == null ? '' : (isFinite(+v) ? (+v).toFixed(6) : v);
@@ -952,7 +980,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.0 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.1 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {
@@ -1408,6 +1436,7 @@
   const saveEvalsQuiet = () => DB.setMeta('evals', S.evals);
   async function pullAll() {
     let cur = await metaGet('sync', { ts: 'epoch', u: '' }), total = 0, chg = false;
+    const firstSync = cur.ts === 'epoch', newAsg = [];
     const byU = new Map(); S.feats.forEach(f => byU.set(featU2(f), f)); const evByK = new Map(S.evals.map(e => [e.key, e]));
     const tomb = new Set((await metaGet('tomb', [])).map(t => t.u));
     for (let guard = 0; guard < 400; guard++) {
@@ -1427,6 +1456,7 @@
           const d = it.data || {}; const me = Cloud.user();
           if (me && me.role !== 'admin' && d.owner !== me.id && d.asg !== me.id) { if (e) { S.evals = S.evals.filter(x => x !== e); evByK.delete(key); evChg = true; } continue; }
           if (e && (e.ts || 0) > (e.sy || 0)) continue;
+          if (me && me.role !== 'admin' && d.asg === me.id && d.estado !== 'hecha' && !(e && e.asg === me.id)) newAsg.push({ u: it.u, d });
           if (!e) { e = { id: 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7) }; S.evals.push(e); evByK.set(key, e); }
           Object.assign(e, d, { key, sy: d.ts || 0 }); evChg = true;
         }
@@ -1438,7 +1468,15 @@
       if (page.length < 200) break;
     }
     if (chg) { reindex(); cajaByName = null; updateNearby(); map.invalidate(); if (S.sel && !S.feats.includes(S.sel)) deselect(); }
+    if (newAsg.length && !firstSync) announceAssigned(newAsg);
     return total;
+  }
+  // Avisa al técnico de evaluaciones recién asignadas (en pantalla y, en la app Android, también como notificación)
+  function announceAssigned(list) {
+    const f = list[0].d, first = (f.cliente || 'Orden ' + (f.orden || '')) + (f.direccion ? ' · ' + f.direccion : '');
+    const title = list.length === 1 ? 'Nueva evaluación asignada' : 'Te asignaron ' + list.length + ' evaluaciones', text = list.length === 1 ? first : 'Primera: ' + first;
+    toast(title, 4500);
+    try { if (NB && NB.assigned) NB.assigned(title, text, list.map(x => x.u).join('\n'), !!document.hidden); } catch (e) { }
   }
   const featU2 = f => f.u || (f.src === S.seedName ? 'seed:' + f.id : '');
   function adoptEvals() {

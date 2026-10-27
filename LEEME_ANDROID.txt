@@ -70,3 +70,12 @@ Se mantienen: satélite sin pantalla gris (se amplía la imagen disponible), fon
 - Satélite: vuelve a pedir el detalle completo (hasta zoom 19). Si Esri no tiene imagen en ese lugar ("Map data not yet available"), la app lo detecta y usa la imagen del nivel anterior ampliada.
 - Modo oscuro: el filtro de color se aplica una sola vez por mosaico (antes en cada cuadro), lo que aligera mucho el movimiento y el zoom.
 - Se quitó el desenfoque del fondo al abrir ventanas.
+
+=== VERSION 3.1: CUADRO DE MEDICIÓN MOVIBLE Y AVISOS DE ASIGNACIÓN ===
+- Web: el cuadro de "Metraje del trazado" se arrastra con el mouse (agárralo por la zona del metraje o el icono ⠿); recuerda su lugar; doble clic para volver a la posición original.
+- Android: cuando el administrador asigna evaluaciones a un técnico, al teléfono le llega una notificación ("Nueva evaluación asignada" / "Te asignaron N evaluaciones").
+  · Con la app abierta: aviso inmediato en pantalla (la app sincroniza cada 30 s).
+  · Con la app cerrada o en segundo plano: Android revisa cada ~15 minutos (límite del sistema).
+  · Android 13 o superior pregunta el permiso de notificaciones la primera vez que el técnico inicia sesión: hay que aceptarlo.
+  · Algunos fabricantes (Xiaomi, Huawei, Samsung…) detienen las apps en segundo plano: conviene dejar la batería de la app en "Sin restricciones".
+PASO OBLIGATORIO: ejecutar 6_notificaciones.sql en Supabase.
