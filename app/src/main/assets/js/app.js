@@ -8,6 +8,7 @@
   const ICONS = {
     menu: 'M4 7h16M4 12h16M4 17h10', search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3',
     locate: 'M12 3v3M12 18v3M3 12h3M18 12h3M12 16.5a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9z',
+    compass: 'M12 2.5l4 9.5-4 9.5-4-9.5zM8 12h8',
     layers: 'M12 3l9 5-9 5-9-5 9-5zM3 12.5l9 5 9-5M3 16.5l9 5 9-5',
     ruler: 'M3.5 16.5l13-13 4 4-13 13-4-4zM8 8l2.5 2.5M11 5l2 2M5 11l2 2M13 13l2.5 2.5',
     plus: 'M12 5v14M5 12h14', x: 'M6 6l12 12M18 6L6 18',
@@ -44,6 +45,7 @@
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ layers: S.layers, base: S.base, theme: S.theme, themeMode: S.themeMode, radius: S.radius, gkey: S.gkey || '', nbMode: S.nbMode, autoOrd: S.autoOrd })); } catch (e) { }
   }
 
+  const lightMap = () => S.base === 'light' || S.base === 'osm' || S.theme === 'light';
   /* ---- capa "Rutas de evaluación": apagada para el administrador (elige técnicos), encendida para el técnico ---- */
   S.evShow = new Set();
   const RCOL = ['#ff5d8f', '#22c55e', '#38bdf8', '#ffb547', '#a78bfa', '#f97316', '#14b8a6', '#eab308'];
@@ -79,9 +81,11 @@
   }
 
   const BASES = {
-    dark: { label: 'Oscuro', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', maxZoom: 19, filter: 'invert(1) hue-rotate(180deg) brightness(.92) contrast(.95) saturate(.8)', attr: '© OpenStreetMap', bg: '#0b1220', grid: 'rgba(255,255,255,.045)' },
-    light: { label: 'Calles', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', maxZoom: 19, attr: '© OpenStreetMap', bg: '#e9edf2', grid: 'rgba(20,30,50,.06)' },
+    dark: { label: 'Oscuro', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', maxZoom: 20, r2: true, attr: '© OpenStreetMap · © CARTO', bg: '#0f1217', grid: 'rgba(255,255,255,.04)' },
+    light: { label: 'Calles', url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', maxZoom: 20, r2: true, attr: '© OpenStreetMap · © CARTO', bg: '#f2efe9', grid: 'rgba(20,30,50,.06)' },
+    osm: { label: 'Calles OpenStreetMap', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', maxZoom: 19, attr: '© OpenStreetMap', bg: '#e9edf2', grid: 'rgba(20,30,50,.06)' },
     sat: { label: 'Satélite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maxZoom: 19, ph: true, attr: 'Esri, Maxar, Earthstar Geographics', bg: '#101820', grid: 'rgba(255,255,255,.05)' },
+    sath: { label: 'Satélite con nombres', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', overlay: 'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', ovMax: 20, maxZoom: 19, ph: true, r2: true, attr: 'Esri, Maxar, Earthstar Geographics · © CARTO', bg: '#101820', grid: 'rgba(255,255,255,.05)' },
     gmap: { label: 'Google Maps · Mapa', google: true, gtype: 'roadmap', attr: '' },
     gsat: { label: 'Google Maps · Satélite', google: true, gtype: 'hybrid', attr: '' },
     vec: { label: 'Calles sin conexión', vector: true, attr: '© OpenStreetMap · Protomaps' },
@@ -200,7 +204,7 @@
       b = BASES.dark;
     }
     if (gmap) { map.detachGoogle(); $('#gmap').hidden = true; }
-    map.setSource(b.url ? { url: b.url, maxZoom: b.maxZoom, minZoom: 0, filter: b.filter || '', ph: !!b.ph } : null);
+    map.setSource(b.url ? { url: b.url, overlay: b.overlay || null, ovMax: b.ovMax, maxZoom: b.maxZoom, minZoom: 0, filter: b.filter || '', ph: !!b.ph, r2: !!b.r2 } : null);
     $('#attrib').textContent = b.attr; applyTheme();
   }
   /* ---------- utilidades geográficas ---------- */
@@ -356,6 +360,8 @@
     const inView = f => f.bb[2] >= b.x0 && f.bb[0] <= b.x1 && f.bb[3] >= b.y0 && f.bb[1] <= b.y1;
     const sel = S.sel, selGroup = sel ? gkey(sel) : null;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    const R = m.rot || 0;   // el texto siempre se ve derecho aunque el mapa esté girado
+    const up = (x, y, f) => { if (!R) { f(x, y); return; } ctx.save(); ctx.translate(x, y); ctx.rotate(-R); f(0, 0); ctx.restore(); };
 
     if (L.areas && z >= 12.5) {
       ctx.beginPath();
@@ -382,32 +388,48 @@
 
     if (L.cajas) {
       const r = z < 11 ? 2.2 : z < 13 ? 3.2 : z < 15 ? 4.6 : z < 17 ? 6.5 : 8;
-      const sets = { caja: [], nodo: [], nueva: [] }, edited = [];
+      const sets = { caja: [], nodo: [], nueva: [] }, edited = [], clu = z < 14.5, cells = clu ? new Map() : null;
       for (const p of S.pts) {
         if (p.mx < b.x0 || p.mx > b.x1 || p.my < b.y0 || p.my > b.y1) continue;
         const x = (p.mx - m.cx) * s + m.w / 2, y = (p.my - m.cy) * s + m.h / 2;
+        if (clu && p !== sel) {
+          const ck = Math.floor(x / 58) + ',' + Math.floor(y / 58); let c = cells.get(ck);
+          if (!c) { c = { n: 0, sx: 0, sy: 0, mx: 0, my: 0, p, x, y }; cells.set(ck, c); }
+          c.n++; c.sx += x; c.sy += y; c.mx += p.mx; c.my += p.my; continue;
+        }
         sets[kindOf(p)].push(p, x, y); if (p.st === 'edit') edited.push(x, y);
       }
+      const clusters = [];
+      if (clu) for (const c of cells.values()) {
+        if (c.n === 1) { sets[kindOf(c.p)].push(c.p, c.x, c.y); if (c.p.st === 'edit') edited.push(c.x, c.y); }
+        else clusters.push({ x: c.sx / c.n, y: c.sy / c.n, n: c.n, mx: c.mx / c.n, my: c.my / c.n, r: 11 + Math.min(11, Math.log2(c.n) * 2.2) });
+      }
+      S._cl = clusters;
       for (const k of ['caja', 'nodo', 'nueva']) {
         const a = sets[k]; if (!a.length) continue;
         ctx.beginPath();
         for (let i = 0; i < a.length; i += 3) { ctx.moveTo(a[i + 1] + r, a[i + 2]); ctx.arc(a[i + 1], a[i + 2], r, 0, 6.2832); }
         ctx.fillStyle = k === 'caja' ? COL.accent : k === 'nodo' ? COL.node : COL.nueva; ctx.fill();
-        if (z >= 13) { ctx.lineWidth = z >= 15 ? 2 : 1.2; ctx.strokeStyle = S.base === 'light' || S.theme === 'light' ? 'rgba(255,255,255,.95)' : 'rgba(8,14,26,.85)'; ctx.stroke(); }
+        if (z >= 11) { ctx.lineWidth = z >= 15 ? 2 : 1.4; ctx.strokeStyle = lightMap() ? 'rgba(255,255,255,.95)' : 'rgba(8,14,26,.85)'; ctx.stroke(); }
       }
       if (edited.length) {
         ctx.beginPath(); for (let i = 0; i < edited.length; i += 2) { ctx.moveTo(edited[i] + r + 3, edited[i + 1]); ctx.arc(edited[i], edited[i + 1], r + 3, 0, 6.2832); }
         ctx.strokeStyle = COL.nueva; ctx.lineWidth = 2; ctx.stroke();
       }
+      for (const c of clusters) {
+        ctx.beginPath(); ctx.arc(c.x, c.y, c.r + 4, 0, 6.2832); ctx.fillStyle = hexA(COL.accent, .25); ctx.fill();
+        ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, 6.2832); ctx.fillStyle = hexA(COL.accent, .95); ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = lightMap() ? 'rgba(255,255,255,.95)' : 'rgba(8,14,26,.85)'; ctx.stroke();
+        up(c.x, c.y, (x, y) => { ctx.font = '800 12px ui-rounded,system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#04141f'; ctx.fillText(c.n >= 1000 ? Math.round(c.n / 100) / 10 + 'k' : c.n, x, y + .5); ctx.textAlign = 'start'; });
+      }
       if (L.etiquetas && z >= 17) {
         labelsSeen.clear(); ctx.font = '600 12px ui-rounded,system-ui,sans-serif'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3.5; ctx.lineJoin = 'round';
-        const halo = S.base === 'light' || S.theme === 'light' ? 'rgba(255,255,255,.92)' : 'rgba(8,14,26,.9)';
+        const halo = lightMap() ? 'rgba(255,255,255,.92)' : 'rgba(8,14,26,.9)';
         ctx.fillStyle = COL.text; let n = 0;
         for (const k of ['caja', 'nodo', 'nueva']) {
           const a = sets[k];
           for (let i = 0; i < a.length && n < 160; i += 3) {
             const cell = ((a[i + 1] / 130) | 0) + ':' + ((a[i + 2] / 20) | 0); if (labelsSeen.has(cell)) continue; labelsSeen.add(cell);
-            ctx.strokeStyle = halo; ctx.strokeText(a[i].n, a[i + 1] + r + 5, a[i + 2]); ctx.fillText(a[i].n, a[i + 1] + r + 5, a[i + 2]); n++;
+            const nm = a[i].n; up(a[i + 1] + r + 5, a[i + 2], (x, y) => { ctx.strokeStyle = halo; ctx.strokeText(nm, x, y); ctx.fillText(nm, x, y); }); n++;
           }
         }
       }
@@ -450,7 +472,7 @@
         const age = Date.now() - new Date(u.updated_at).getTime();
         const col = age < 180000 ? '#22c55e' : age < 900000 ? '#ffb547' : '#8b97a8';
         ctx.beginPath(); ctx.arc(x, y, 16, 0, 6.2832); ctx.fillStyle = col; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke();
-        ctx.fillStyle = '#04141f'; ctx.fillText(initials(u.name), x, y + .5);
+        ctx.fillStyle = '#04141f'; up(x, y, (tx, ty) => ctx.fillText(initials(u.name), tx, ty + .5));
         if (z >= 12) { pill(ctx, (u.name || '').split(' ')[0], x, y + 29, col); ctx.font = '800 12px ui-rounded,system-ui,sans-serif'; ctx.textAlign = 'center'; }
       }
       ctx.textAlign = 'start';
@@ -471,10 +493,10 @@
         ctx.beginPath(); ctx.moveTo(x, y - rr - 3); ctx.lineTo(x + rr + 3, y); ctx.lineTo(x, y + rr + 3); ctx.lineTo(x - rr - 3, y); ctx.closePath();
         ctx.fillStyle = e.tipo === 'Daño' ? '#ff5252' : '#ff5d8f'; ctx.fill(); ctx.lineWidth = 2.2; ctx.strokeStyle = '#fff'; ctx.stroke();
         const ds = e.asg ? dispSeq(e) : null;
-        if (ds != null && z >= 13.5) { ctx.font = '800 11px ui-rounded,system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText(ds, x, y + .5); ctx.textAlign = 'start'; ctx.font = '700 11.5px ui-rounded,system-ui,sans-serif'; }
+        if (ds != null && z >= 13.5) { ctx.font = '800 11px ui-rounded,system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; up(x, y, (tx, ty) => ctx.fillText(ds, tx, ty + .5)); ctx.textAlign = 'start'; ctx.font = '700 11.5px ui-rounded,system-ui,sans-serif'; }
         if (z >= 15.5 && e.orden) {
-          ctx.lineWidth = 3.5; ctx.strokeStyle = S.base === 'light' || S.theme === 'light' ? 'rgba(255,255,255,.92)' : 'rgba(8,14,26,.9)';
-          ctx.strokeText(e.orden, x + rr + 8, y); ctx.fillStyle = COL.text; ctx.fillText(e.orden, x + rr + 8, y);
+          ctx.lineWidth = 3.5; ctx.strokeStyle = lightMap() ? 'rgba(255,255,255,.92)' : 'rgba(8,14,26,.9)';
+          ctx.fillStyle = COL.text; up(x + rr + 8, y, (tx, ty) => { ctx.strokeText(e.orden, tx, ty); ctx.fillText(e.orden, tx, ty); });
         }
       }
     }
@@ -501,10 +523,12 @@
     }
   }
   function pill(ctx, text, x, y, color) {
+    const R = map.rot || 0; if (R) { ctx.save(); ctx.translate(x, y); ctx.rotate(-R); x = 0; y = 0; }
     ctx.font = '700 12.5px ui-rounded,system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     const w = ctx.measureText(text).width + 14;
     ctx.fillStyle = color; roundRect(ctx, x - w / 2, y - 11, w, 22, 11); ctx.fill();
     ctx.fillStyle = '#04141f'; if (color === '#ff4d9d') ctx.fillStyle = '#fff'; ctx.fillText(text, x, y + .5); ctx.textAlign = 'start';
+    if (R) ctx.restore();
   }
   function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
   function hexA(hex, a) {
@@ -555,9 +579,15 @@
     }
     const ht = hitTeam(px, py); if (ht) { openUserDetail(ht); return; }
     const he = hitEval(px, py); if (he) { openEvalDetail(he); return; }
+    if (S.layers.cajas && S._cl && map.z < 14.5) {   // toque en un grupo de cajas: acercar
+      for (const c of S._cl) if (Math.hypot(c.x - px, c.y - py) <= c.r + 8) { const ll = { lat: Merc.latOf(c.my), lon: Merc.lonOf(c.mx) }; map.flyTo(ll.lat, ll.lon, Math.min(map.z + 2.4, 17), 0.5, 450); return; }
+    }
     const h = hitPoint(px, py);
     if (h) select(h, true, true); else if (S.sel) deselect();
   };
+  const btnN = $('#btnNorth');
+  map.onRot = r => { const on = Math.abs(r) > 0.012; if (btnN.hidden === on) btnN.hidden = !on; const ic0 = btnN.firstElementChild; if (ic0) ic0.style.transform = 'rotate(' + (-r) + 'rad)'; };
+  btnN.onclick = () => map.resetNorth();
   map.onUserMove = () => { S.userMoved = true; if (S.follow) { S.follow = false; $('#btnLocate').classList.remove('on'); } };
   map.onMoveEnd = () => { if (!S.pos) updateNearby(); };
   map.onMove = () => { if (S.pick) $('#pickCoords').textContent = coordTxt(map.center().lat, map.center().lon); };
@@ -641,7 +671,20 @@
   function cardHtml(f, d) {
     return '<button class="card" data-id="' + f.id + '"><div class="row top"><span class="dot ' + kindOf(f) + '"></span><div class="meta"><div class="nm">' + esc(f.n) + '</div><div class="sb">' + esc(subOf(f)) + '</div></div></div><div class="dd">' + fmtD(d).replace(/ (m|km)$/, ' <small>$1</small>') + '</div></button>';
   }
-  let _ordSig = '';
+  let _ordSig = '', _noteSig = null;
+  // Aviso al técnico cuando la ruta se reordena según su ubicación
+  function reorderNotice() {
+    if (!evTech() || !S.pos || !autoOrdOn()) return;
+    const od = myOrder(); if (od.list.length < 1) { _noteSig = null; return; }
+    if (_noteSig === od.sig) return;
+    const first = od.list[0], d = first.lat != null ? fmtD(hav(S.pos.lat, S.pos.lon, first.lat, first.lon)) : '';
+    const was = _noteSig; _noteSig = od.sig;
+    if (od.list.length < 2 && was === null) return;
+    toast((was === null ? 'Ruta ordenada por cercanía a tu ubicación' : 'Ruta reordenada según tu ubicación') + ' · 1.º ' + (first.cliente || first.orden || 'orden') + (d ? ' a ' + d : ''), 5000);
+    map.invalidate();
+  }
+  let _hasO = null;
+  setInterval(() => { const h = nbOrders(); if (h !== _hasO) { _hasO = h; updateNearby(); } reorderNotice(); }, 3000);
   function nbOrders() {   // solo técnicos con órdenes asignadas
     const me = evTech(); return me ? S.evals.some(e => e.asg === me.id && e.estado !== 'hecha') : false;
   }
@@ -652,7 +695,7 @@
     if (ordMode) {
       const ref = refPoint(), od = myOrder(), list = od.list;
       $('#nbChips').innerHTML = modeChips + '<button class="chip' + (autoOrdOn() ? ' on' : '') + '" data-oa="1">Orden por cercanía</button>';
-      $('#nbSub').textContent = list.length + (list.length === 1 ? ' pendiente' : ' pendientes') + (autoOrdOn() ? ' · ordenadas desde ' + (ref.gps ? 'tu ubicación, en vivo' : 'el centro del mapa') : ' · en el orden del administrador');
+      $('#nbSub').textContent = list.length + (list.length === 1 ? ' pendiente' : ' pendientes') + (autoOrdOn() ? ' · ordenadas desde ' + (ref.gps ? 'tu ubicación, en vivo (' + new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ')' : 'el centro del mapa') : ' · en el orden del administrador');
       $('#nbList').innerHTML = list.map(e => {
         const d = e.lat != null ? hav(ref.lat, ref.lon, e.lat, e.lon) : null;
         return '<button class="card" data-ev="' + esc(e.id) + '"><div class="row top"><span style="flex:none;width:24px;height:24px;border-radius:50%;background:#ff5d8f;color:#fff;font:800 12px system-ui;display:grid;place-items:center">' + (od.map.get(e.id) || '') + '</span><div class="meta"><div class="nm">' + esc(e.cliente || e.orden || 'Orden') + '</div><div class="sb">' + esc((e.orden ? e.orden + ' · ' : '') + (e.direccion || e.tipo || '')) + '</div></div></div><div class="dd">' + (d == null ? '<small>sin ubicación</small>' : fmtD(d).replace(/ (m|km)$/, ' <small>$1</small>')) + '</div></button>';
@@ -994,7 +1037,7 @@
   $('#btnLayers').onclick = () => {
     const m = modal('<h3>Mapa y capas</h3><p class="lead">Elige el fondo y qué mostrar sobre el mapa.</p><div id="lyB"></div><div class="sep"></div><div id="lyL"></div><div class="legend"><span><i class="dot"></i>Caja</span><span><i class="dot nodo"></i>Nodo / cabina</span><span><i class="dot nueva"></i>Nueva</span></div>');
     const render = () => {
-      const keys = ['auto', 'dark', 'light', 'sat', 'none'];
+      const keys = ['auto', 'dark', 'light', 'osm', 'sat', 'sath', 'none'];
       const lab = k => k === 'auto' ? 'Automático · día y noche' : BASES[k].label;
       const sub = k => k === 'auto' ? '<small>Claro de día y oscuro de noche, según el sol</small>' : k === 'none' ? '<small>No descarga nada · ideal sin señal</small>' : '';
       const on = k => k === 'auto' ? (S.themeMode === 'auto' && (S.base === 'dark' || S.base === 'light')) : (k === 'dark' || k === 'light') ? (S.themeMode !== 'auto' && S.base === k) : S.base === k;
@@ -1024,7 +1067,7 @@
         S.netBad = false; clearInterval(probeT); map._fails = 0; map._okAt = performance.now(); netState();
         if (k === 'auto') { S.themeMode = 'auto'; if (S.base !== 'dark' && S.base !== 'light') S.base = 'dark'; autoTheme(); }
         else if (k === 'dark' || k === 'light') { S.themeMode = k; S.base = k; S.theme = k; applyBase(); }
-        else { S.base = k; applyBase(); }
+        else { S.base = k; if (k === 'osm') S.theme = 'light'; applyBase(); }
         saveSettings(); render();
       }
       if (l) { const k = l.dataset.l; S.layers[k] = k === 'evals' ? S.layers.evals === false : !S.layers[k]; saveSettings(); map.invalidate(); render(); }
@@ -1052,7 +1095,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.4 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.6 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {
@@ -1215,8 +1258,8 @@
       let i = 0;
       const worker = async () => {
         while (i < list.length && !cancel) {
-          const [z, x, y] = list[i++], url = b.url.replace('{z}', z).replace('{x}', x).replace('{y}', y);
-          try { if (!(await cache.match(url, { ignoreVary: true }))) { const r = await fetch(url, { mode: 'cors' }); if (r.ok) await cache.put(url, r); else fail++; } } catch (e) { fail++; }
+          const [z, x, y] = list[i++], urls = [GeoMap.fill(b.url, z, x, y)]; if (b.overlay && z <= (b.ovMax || 18)) urls.push(GeoMap.fill(b.overlay, z, x, y));
+          for (const url of urls) { try { if (!(await cache.match(url, { ignoreVary: true }))) { const r = await fetch(url, { mode: 'cors' }); if (r.ok) await cache.put(url, r); else fail++; } } catch (e) { fail++; } }
           done++; if (done % 8 === 0 || done === list.length) { bar.style.width = (done / list.length * 100) + '%'; txt.textContent = done.toLocaleString('es') + ' de ' + list.length.toLocaleString('es') + ' mosaicos…'; }
         }
       };
@@ -1540,7 +1583,7 @@
       SY.info = 'Descargando ' + total; updateSyncPill();
       if (page.length < 200) break;
     }
-    if (chg) { reindex(); cajaByName = null; updateNearby(); map.invalidate(); if (S.sel && !S.feats.includes(S.sel)) deselect(); }
+    if (chg) { reindex(); cajaByName = null; updateNearby(); reorderNotice(); map.invalidate(); if (S.sel && !S.feats.includes(S.sel)) deselect(); }
     if (newAsg.length && !firstSync) announceAssigned(newAsg);
     return total;
   }

@@ -19,7 +19,7 @@
       this.vec = null; this.onNetBad = null; this._fails = 0; this._okAt = 0;
       this.lock = null; this.onDraw = null; this.onTap = null; this.onMove = null; this.onMoveEnd = null; this.onUserMove = null;
       this.anim = null; this.inertia = null; this._raf = 0; this._moveEndT = 0;
-      this.gm = null; this._hold = 0; this._gl = 0;
+      this.gm = null; this._hold = 0; this._gl = 0; this.rot = 0; this.rotT = null; this.onRot = null;
       this._bind();
       new ResizeObserver(() => this._resize()).observe(canvas.parentElement || canvas);
       this._resize();
@@ -29,7 +29,11 @@
     toScreenN(x, y) { return [(x - this.cx) * this.s + this.w / 2, (y - this.cy) * this.s + this.h / 2]; }
     fromScreen(px, py) { return { lat: latOf((py - this.h / 2) / this.s + this.cy), lon: lonOf((px - this.w / 2) / this.s + this.cx) }; }
     center() { return { lat: latOf(this.cy), lon: lonOf(this.cx) }; }
-    bounds() { const hx = this.w / 2 / this.s, hy = this.h / 2 / this.s; return { x0: this.cx - hx, x1: this.cx + hx, y0: this.cy - hy, y1: this.cy + hy }; }
+    _un(x, y) { const c = Math.cos(this.rot), s = Math.sin(this.rot), dx = x - this.w / 2, dy = y - this.h / 2; return { x: dx * c + dy * s + this.w / 2, y: -dx * s + dy * c + this.h / 2 }; }
+    _unv(dx, dy) { const c = Math.cos(this.rot), s = Math.sin(this.rot); return [dx * c + dy * s, -dx * s + dy * c]; }
+    resetNorth() { this.rotT = 0; this._schedule(); }
+    setRot(r) { this.rot = Math.atan2(Math.sin(r), Math.cos(r)); this.invalidate(); this.onRot && this.onRot(this.rot); }
+    bounds() { const c = Math.abs(Math.cos(this.rot)), sn = Math.abs(Math.sin(this.rot)), hx = (this.w * c + this.h * sn) / 2 / this.s, hy = (this.w * sn + this.h * c) / 2 / this.s; return { x0: this.cx - hx, x1: this.cx + hx, y0: this.cy - hy, y1: this.cy + hy }; }
     metersPerPx(lat) { return 40075016.686 * Math.cos((lat == null ? this.center().lat : lat) * D2R) / (TS * Math.pow(2, this.z)); }
 
     /* ---- vista ---- */
@@ -76,7 +80,7 @@
     /* ---- Google Maps como mapa base: Google maneja gestos y dibujo del fondo; este canvas dibuja encima ---- */
     attachGoogle(gm) {
       if (this.gm === gm) return;
-      this.gm = gm; this.src = null; this.tiles.clear(); this.queue = [];
+      this.gm = gm; this.rot = 0; this.rotT = null; this.onRot && this.onRot(0); this.src = null; this.tiles.clear(); this.queue = [];
       if (!this._gl) {
         this._gl = 1;
         gm.addListener('dragstart', () => this.onUserMove && this.onUserMove());
@@ -107,13 +111,14 @@
     setSource(src) {
       this.src = src; this.tiles = new Map(); this.queue = []; this.low = []; this.invalidate();
     }
-    _tileUrl(z, x, y) { return this.src.url.replace('{z}', z).replace('{x}', x).replace('{y}', y); }
-    _getTile(z, x, y, want, low) {
-      const key = z + '/' + x + '/' + y;
+    static fill(url, z, x, y) { return url.replace('{z}', z).replace('{x}', x).replace('{y}', y).replace('{s}', 'abcd'[(x + y) & 3]).replace('{r}', (window.devicePixelRatio || 1) >= 1.5 ? '@2x' : ''); }
+    _tileUrl(z, x, y, ov) { return GeoMap.fill(ov ? this.src.overlay : this.src.url, z, x, y); }
+    _getTile(z, x, y, want, low, ov) {
+      const key = (ov ? 'o' : '') + z + '/' + x + '/' + y;
       let t = this.tiles.get(key);
       if (!t) {
         if (!want) return null;
-        t = { key, z, x, y, st: 0, img: null, fail: 0, f: this.frame, at: 0 };
+        t = { key, z, x, y, ov: !!ov, st: 0, img: null, fail: 0, f: this.frame, at: 0 };
         this.tiles.set(key, t); (low ? this.low : this.queue).push(t);
       } else if (want) {
         t.f = this.frame;
@@ -133,12 +138,12 @@
         img.onload = () => {
           this._fails = 0; this._okAt = performance.now(); if (img._b) URL.revokeObjectURL(img._b);
           this.inflight--;
-          if (srcAt && srcAt.ph && t.z >= 14 && this._isPH(img)) {
+          if (srcAt && srcAt.ph && !t.ov && t.z >= 14 && this._isPH(img)) {
             // Esri no tiene imagen a este nivel: se usa la del nivel anterior ampliada
-            t.st = 4; if (t.z > 0 && this.tiles.get(t.key) === t) this._getTile(t.z - 1, t.x >> 1, t.y >> 1, true);
+            t.st = 4; if (t.z > 0 && this.tiles.get(t.key) === t) this._getTile(t.z - 1, t.x >> 1, t.y >> 1, true, false, false);
           } else {
             let d = img;
-            if (srcAt && srcAt.filter) {  // el filtro (modo oscuro) se aplica una sola vez, no en cada cuadro
+            if (srcAt && srcAt.filter && !t.ov) {  // el filtro (modo oscuro) se aplica una sola vez, no en cada cuadro
               try { const c = document.createElement('canvas'); c.width = img.naturalWidth || 256; c.height = img.naturalHeight || 256; const x = c.getContext('2d'); x.filter = srcAt.filter; x.drawImage(img, 0, 0); d = c; } catch (e) { d = img; }
             }
             t.st = 2; t.img = d; t.at = performance.now();
@@ -149,7 +154,7 @@
           t.st = 3; t.fail = performance.now(); this.inflight--; this._pump();
           if (++this._fails >= 8 && performance.now() - this._okAt > 8000) { this._fails = 0; this.onNetBad && this.onNetBad(); }
         };
-        const url = this._tileUrl(t.z, t.x, t.y);
+        const url = this._tileUrl(t.z, t.x, t.y, t.ov);
         if (window.caches) {
           caches.open('tiles-v1').then(c => c.match(url, { ignoreVary: true })).then(r => r ? r.blob() : null).then(b => {
             if (b) { img._b = URL.createObjectURL(b); img.src = img._b; }
@@ -171,35 +176,38 @@
       } catch (e) { return false; }
     }
     _evict() {
-      if (this.tiles.size < 600) return;
-      let n = this.tiles.size - 420;
+      const hi = this.src && this.src.r2 ? 220 : 600, lo = this.src && this.src.r2 ? 150 : 420;
+      if (this.tiles.size < hi) return;
+      let n = this.tiles.size - lo;
       for (const [k, t] of this.tiles) { if (n <= 0) break; if (t.f < this.frame - 1 && t.st !== 1) { this.tiles.delete(k); n--; } }
     }
     _drawTiles(ctx) {
       const src = this.src; if (!src) return;
-      const zi = clamp(Math.round(this.z), src.minZoom || 0, src.maxZoom || 19);
+      const b = this.bounds(); this.frame++;
+      this._layer(ctx, src, false, b);
+      if (src.overlay) this._layer(ctx, src, true, b);
+      this._pump(); this._evict();
+    }
+    _layer(ctx, src, ov, b) {
+      const zi = clamp(Math.round(this.z), ov ? 0 : (src.minZoom || 0), ov ? (src.ovMax || 18) : (src.maxZoom || 19));
       const n = Math.pow(2, zi), size = this.s / n;
-      const b = this.bounds();
       const x0 = Math.floor(b.x0 * n), x1 = Math.floor(b.x1 * n), y0 = Math.max(0, Math.floor(b.y0 * n)), y1 = Math.min(n - 1, Math.floor(b.y1 * n));
-      if ((x1 - x0 + 1) * (y1 - y0 + 1) > 120) return;
-      this.frame++;
-      const now = performance.now(); let miss = 0;
-      // pinta lo que haya de relleno: mosaicos del mapa anterior (mismo nivel) o el "padre" más cercano en memoria
+      if ((x1 - x0 + 1) * (y1 - y0 + 1) > (this.rot ? 240 : 120)) return;
+      // pinta lo que haya de relleno: el "padre" más cercano en memoria
       const under = (wx, y, dx, dy, sz) => {
         for (let d = 1; d <= 5 && zi - d >= 0; d++) {
-          const k = Math.pow(2, d), p = this._getTile(zi - d, Math.floor(wx / k), Math.floor(y / k), false);
-          if (p) { const ss = TS / k; ctx.drawImage(p.img, (wx % k) * ss, (y % k) * ss, ss, ss, dx, dy, sz, sz); return true; }
+          const k = Math.pow(2, d), p = this._getTile(zi - d, Math.floor(wx / k), Math.floor(y / k), false, false, ov);
+          if (p) { const ss = (p.img.width || TS) / k; ctx.drawImage(p.img, (wx % k) * ss, (y % k) * ss, ss, ss, dx, dy, sz, sz); return true; }
         }
         return false;
       };
       for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
         const wx = ((x % n) + n) % n;
         const dx = (x / n - this.cx) * this.s + this.w / 2, dy = (y / n - this.cy) * this.s + this.h / 2, sz = size + 0.6;
-        const t = this._getTile(zi, wx, y, true);
+        const t = this._getTile(zi, wx, y, true, false, ov);
         if (t) { ctx.drawImage(t.img, dx, dy, sz, sz); continue; }
-        miss++; under(wx, y, dx, dy, sz);
+        under(wx, y, dx, dy, sz);
       }
-      this._pump(); this._evict();
     }
 
     /* ---- dibujo ---- */
@@ -225,19 +233,28 @@
         if (Math.abs(dz) < 0.004) { this.zoomAt(q.px, q.py, q.z); this.zt = null; this._zl = 0; }
         else { this.zoomAt(q.px, q.py, this.z + dz * (1 - Math.exp(-Math.max(dt, 8) / 75))); busy = true; }
       }
+      if (this.rotT != null) {
+        const dtr = Math.min(now - (this._rl || now), 50); this._rl = now;
+        let d = this.rotT - this.rot; d = Math.atan2(Math.sin(d), Math.cos(d));
+        if (Math.abs(d) < 0.004) { this.rot = this.rotT; this.rotT = null; this._rl = 0; } else { this.rot += d * (1 - Math.exp(-Math.max(dtr, 8) / 90)); busy = true; }
+        this._dirty = true; this.onRot && this.onRot(this.rot);
+      }
       if (this._dirty) { this._dirty = false; this._render(); }
       if (busy) this._schedule();
     }
+    _rotOn(ctx) { if (this.rot && !this.gm) { ctx.translate(this.w / 2, this.h / 2); ctx.rotate(this.rot); ctx.translate(-this.w / 2, -this.h / 2); } }
     _render() {
       const ctx = this.ctx, dpr = this.dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      if (this.vec) { this.vec.draw(ctx, this); this.onDraw && this.onDraw(ctx, this); return; }
+      if (this.vec) { if (this.rot) { ctx.fillStyle = this.bg; ctx.fillRect(0, 0, this.w, this.h); this._rotOn(ctx); } this.vec.draw(ctx, this); this.onDraw && this.onDraw(ctx, this); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); return; }
       if (this.gm) ctx.clearRect(0, 0, this.w, this.h);
       else {
         ctx.fillStyle = this.bg; ctx.fillRect(0, 0, this.w, this.h);
-        this._drawGrid(ctx); if (this.src) this._drawTiles(ctx);
+        if (!this.rot) this._drawGrid(ctx);
+        this._rotOn(ctx); if (this.src) this._drawTiles(ctx);
       }
       this.onDraw && this.onDraw(ctx, this);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
     _drawGrid(ctx) {
       const step = 64, ox = (this.cx * this.s - this.w / 2) % step, oy = (this.cy * this.s - this.h / 2) % step;
@@ -260,18 +277,19 @@
       const cv = this.cv, P = new Map();
       let moved = 0, t0 = 0, lastTap = { t: 0, x: 0, y: 0 }, pinch = null, v = { x: 0, y: 0, t: 0 };
       const pos = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+      const U = p => this.rot ? this._un(p.x, p.y) : p;   // pantalla → mapa sin girar
       const pstate = () => {
         const a = Array.from(P.values()), dx = a[1].x - a[0].x, dy = a[1].y - a[0].y;
-        return { d: Math.hypot(dx, dy) || 1, mx: (a[0].x + a[1].x) / 2, my: (a[0].y + a[1].y) / 2 };
+        return { d: Math.hypot(dx, dy) || 1, ang: Math.atan2(dy, dx), mx: (a[0].x + a[1].x) / 2, my: (a[0].y + a[1].y) / 2 };
       };
       cv.addEventListener('pointerdown', e => {
         cv.setPointerCapture(e.pointerId); const p = pos(e); P.set(e.pointerId, p);
-        this.anim = null; this.inertia = null; this.zt = null;
+        this.anim = null; this.inertia = null; this.zt = null; this.rotT = null;
         this.onUserMove && this.onUserMove();
         if (P.size === 1) { moved = 0; t0 = performance.now(); v = { x: 0, y: 0, t: t0 }; }
         if (P.size === 2) {
-          const s = pstate();
-          pinch = { d: s.d, z: this.z, wx: (s.mx - this.w / 2) / this.s + this.cx, wy: (s.my - this.h / 2) / this.s + this.cy };
+          const s = pstate(), m = U({ x: s.mx, y: s.my });
+          pinch = { d: s.d, ang: s.ang, rot0: this.rot, on: false, base: 0, z: this.z, wx: (m.x - this.w / 2) / this.s + this.cx, wy: (m.y - this.h / 2) / this.s + this.cy };
           moved = 99;
         }
       });
@@ -279,7 +297,8 @@
         if (!P.has(e.pointerId)) return;
         const p = pos(e), prev = P.get(e.pointerId); P.set(e.pointerId, p);
         if (P.size === 1) {
-          const dx = p.x - prev.x, dy = p.y - prev.y; moved += Math.abs(dx) + Math.abs(dy);
+          const raw = this.rot ? this._unv(p.x - prev.x, p.y - prev.y) : [p.x - prev.x, p.y - prev.y], dx = raw[0], dy = raw[1];
+          moved += Math.abs(p.x - prev.x) + Math.abs(p.y - prev.y);
           if (moved < 6) return;
           if (this.lock) this.lock = null;  // al arrastrar el mapa se suelta el punto fijado
           this.cx -= dx / this.s; this.cy -= dy / this.s; this._fixCenter();
@@ -289,7 +308,13 @@
         } else if (P.size === 2 && pinch) {
           const s = pstate();
           this.z = clamp(pinch.z + Math.log2(s.d / pinch.d), this.minZ, this.maxZ); this._setS();
-          this.cx = pinch.wx - (s.mx - this.w / 2) / this.s; this.cy = pinch.wy - (s.my - this.h / 2) / this.s;
+          if (!this.gm) {   // girar con dos dedos (solo después de ~8°, para no girar sin querer)
+            let da = s.ang - pinch.ang; da = Math.atan2(Math.sin(da), Math.cos(da));
+            if (!pinch.on && Math.abs(da) > 0.14) { pinch.on = true; pinch.base = da; }
+            if (pinch.on) { this.rot = Math.atan2(Math.sin(pinch.rot0 + da - pinch.base), Math.cos(pinch.rot0 + da - pinch.base)); this.onRot && this.onRot(this.rot); }
+          }
+          const dxs = s.mx - this.w / 2, dys = s.my - this.h / 2, c = Math.cos(this.rot), sn = Math.sin(this.rot);
+          this.cx = pinch.wx - (dxs * c + dys * sn) / this.s; this.cy = pinch.wy - (-dxs * sn + dys * c) / this.s;
           if (this.lock) { this.cx = this.lock.x; this.cy = this.lock.y; }
           this._fixCenter(); this.invalidate(); this._emitMove();
         }
@@ -298,22 +323,24 @@
         if (!P.has(e.pointerId)) return;
         const p = pos(e), wasOne = P.size === 1; P.delete(e.pointerId);
         if (wasOne) {
-          const now = performance.now();
+          const now = performance.now(), q = U(p);
           if (moved < 10 && now - t0 < 500) {
             if (now - lastTap.t < 320 && Math.hypot(p.x - lastTap.x, p.y - lastTap.y) < 30) {
-              this.smoothZoom(p.x, p.y, Math.round(this.z) + 1); lastTap.t = 0;
-            } else { lastTap = { t: now, x: p.x, y: p.y }; this.onTap && this.onTap(p.x, p.y); }
+              this.smoothZoom(q.x, q.y, Math.round(this.z) + 1); lastTap.t = 0;
+            } else { lastTap = { t: now, x: p.x, y: p.y }; this.onTap && this.onTap(q.x, q.y); }
           } else if (now - v.t < 80 && Math.hypot(v.x, v.y) > 0.25) {
             this.inertia = { vx: v.x, vy: v.y, t: 0 }; this._schedule();
           }
-        } else if (P.size === 1) { pinch = null; moved = 99; }
+        } else if (P.size === 1) { if (pinch && pinch.on && Math.abs(this.rot) < 0.1) this.resetNorth(); pinch = null; moved = 99; }
         if (P.size < 2) pinch = null;
       };
       cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
       cv.addEventListener('wheel', e => {
         e.preventDefault(); const p = pos(e);
         this.onUserMove && this.onUserMove();
-        this.smoothZoom(p.x, p.y, (this.zt ? this.zt.z : this.z) - e.deltaY * (e.ctrlKey ? 0.02 : 0.0025));
+        if (e.shiftKey && !this.gm) { this.setRot(this.rot + (e.deltaY || e.deltaX) * 0.004); return; }   // Mayús + rueda: girar
+        const q = U(p);
+        this.smoothZoom(q.x, q.y, (this.zt ? this.zt.z : this.z) - e.deltaY * (e.ctrlKey ? 0.02 : 0.0025));
       }, { passive: false });
     }
   }

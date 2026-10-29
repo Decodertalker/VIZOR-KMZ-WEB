@@ -92,3 +92,15 @@ PASO OBLIGATORIO: ejecutar 6_notificaciones.sql en Supabase.
 - Avisos de asignación: ahora la app mantiene un servicio ligero (notificación fija "Atento a nuevas asignaciones") que revisa el servidor cada ~40 s, incluso con la app cerrada o la pantalla apagada. El aviso llega en menos de un minuto.
 - La primera vez Android pide: permiso de notificaciones y "sin restricciones de batería". Hay que aceptar ambos.
 - Menú > "Probar notificaciones" (solo técnicos): revisa permisos, batería y servidor, y envía un aviso de prueba. Si falta ejecutar 6_notificaciones.sql lo indica.
+
+=== VERSION 3.5: AVISO DE RUTA REORDENADA ===
+- Cuando la ruta del técnico se reordena según su ubicación sale un aviso en pantalla: "Ruta reordenada según tu ubicación · 1.º <cliente> a <distancia>". La primera vez dice "Ruta ordenada por cercanía a tu ubicación".
+- En el panel "Órdenes cercanas" se muestra la hora de la última actualización en vivo.
+- Los botones Cajas / Órdenes aparecen solos en cuanto el técnico tiene órdenes pendientes asignadas (se revisa cada 3 s). Para confirmar que tienes esta versión: Menú > arriba dice "v3.5".
+
+=== VERSION 3.6: MAPA MÁS BONITO ===
+- Fondos nuevos: "Oscuro" y "Calles" ahora son de CARTO (más limpios y con mejores nombres). El de OpenStreetMap sigue disponible como "Calles OpenStreetMap". Nuevo: "Satélite con nombres" (satélite con las calles y lugares escritos encima).
+- Mosaicos en alta resolución (se ven más nítidos en el teléfono). Usan algo más de datos.
+- Cajas agrupadas cuando estás alejado: aparecen círculos con la cantidad; toca uno para acercar. Al acercarte (zoom ~14.5) se ven las cajas sueltas, ahora con borde para verse mejor.
+- Girar el mapa con dos dedos (en computadora: Mayús + rueda del mouse). Aparece una brújula en los botones de la derecha para volver al norte; también se vuelve sola al norte si sueltas casi derecho. Los textos y números siempre se ven derechos.
+- Nota: los mapas de CARTO son gratis con atribución, pero su uso intensivo/comercial puede requerir un plan; si lo prefieres, usa "Calles OpenStreetMap" o "Satélite".
