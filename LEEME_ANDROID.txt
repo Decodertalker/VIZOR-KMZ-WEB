@@ -124,3 +124,7 @@ PASO OBLIGATORIO: ejecutar 6_notificaciones.sql en Supabase.
   · Restricciones de API: solo "Maps JavaScript API".
   · Presupuestos y alertas: crea una alerta de gasto.
   Como la web está en un repositorio público, cualquiera puede ver la clave; con esas restricciones no podrán usarla en otros sitios.
+
+=== VERSION 3.10: GOOGLE MAPS SE PUEDE MOVER ===
+- Con "Google Maps" el mapa no se dejaba arrastrar con el mouse (el lienzo propio tapaba al de Google). Ahora Google recibe los gestos: arrastrar, zoom con rueda, doble clic, y las cajas se siguen tocando.
+- Se corrigió pages.yml (cancel-in-progress: false) para evitar el error "in progress deployment".

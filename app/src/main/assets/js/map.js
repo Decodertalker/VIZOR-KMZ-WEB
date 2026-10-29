@@ -80,6 +80,7 @@
     /* ---- Google Maps como mapa base: Google maneja gestos y dibujo del fondo; este canvas dibuja encima ---- */
     attachGoogle(gm) {
       if (this.gm === gm) return;
+      this.cv.style.pointerEvents = 'none';   // con Google, los gestos (arrastrar, zoom) los recibe Google; este lienzo solo dibuja encima
       this.gm = gm; this.rot = 0; this.rotT = null; this.onRot && this.onRot(0); this.src = null; this.tiles.clear(); this.queue = [];
       if (!this._gl) {
         this._gl = 1;
@@ -92,7 +93,7 @@
       this._push(true); this.invalidate();
     }
     setVector(v) { this.vec = v || null; this.invalidate(); }
-    detachGoogle() { this.gm = null; this.invalidate(); }
+    detachGoogle() { this.gm = null; this.cv.style.pointerEvents = ''; this.invalidate(); }
     _push(force) {
       if (!this.gm) return;
       this._hold = performance.now() + 300;
