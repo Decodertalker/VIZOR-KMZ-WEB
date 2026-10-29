@@ -109,3 +109,18 @@ PASO OBLIGATORIO: ejecutar 6_notificaciones.sql en Supabase.
 - CARTO empezó a exigir clave API (salía "API KEY REQUIRED"). Se quitó por completo. "Oscuro" y "Calles" vuelven a OpenStreetMap, como antes de la 3.6.
 - "Satélite con nombres" ahora usa los nombres de Esri (sin clave). Nueva opción "Calles Esri (colores suaves)".
 - Se mantienen: agrupación de cajas, giro del mapa y brújula de la 3.6.
+
+=== VERSION 3.8: MAPA MÁS RÁPIDO AL CAMBIAR DE ZONA ===
+- Los cuadros del mapa ahora se descargan empezando por el centro de la pantalla y terminando por las orillas (antes era al revés).
+- Al buscar una caja o ir a otra zona, el mapa empieza a descargar la zona de destino mientras dura la animación, y también un nivel más alejado de relleno.
+- Hasta 12 descargas de mapa a la vez (antes 8).
+- Lo que ya visitaste queda guardado y carga al instante.
+
+=== VERSION 3.9: GOOGLE MAPS ===
+- Mapa y capas: nuevas opciones "Google Maps · Mapa" y "Google Maps · Satélite". La clave API viene incluida en js/config.js (CAJAS_GKEY), así que los técnicos no tienen que escribirla.
+- Necesita internet; sin conexión (o si Google falla) la app usa el mapa propio.
+- IMPORTANTE: en Google Cloud > Credenciales, edita la clave y restringe:
+  · Restricciones de aplicación > Sitios web (referentes HTTP): https://TU-USUARIO.github.io/*  y  https://appassets.androidplatform.net/*
+  · Restricciones de API: solo "Maps JavaScript API".
+  · Presupuestos y alertas: crea una alerta de gasto.
+  Como la web está en un repositorio público, cualquiera puede ver la clave; con esas restricciones no podrán usarla en otros sitios.

@@ -152,9 +152,10 @@
     return gLoading;
   }
   async function useGoogle(type) {
-    if (!S.gkey) { askKey(); return false; }
+    const gk = S.gkey || window.CAJAS_GKEY || '';
+    if (!gk) { askKey(); return false; }
     if (!navigator.onLine) { toast('Sin internet: se usa el mapa propio', 3000); return false; }
-    try { await loadGoogle(S.gkey); } catch (e) { toast('No se pudo cargar Google Maps', 3000); return false; }
+    try { await loadGoogle(gk); } catch (e) { toast('No se pudo cargar Google Maps', 3000); return false; }
     if (!gmap) {
       const c = map.center();
       gmap = new google.maps.Map($('#gmap'), { center: { lat: c.lat, lng: c.lon }, zoom: Math.round(map.z), disableDefaultUI: true, gestureHandling: 'greedy', clickableIcons: false, keyboardShortcuts: false, mapTypeId: type });
@@ -184,7 +185,6 @@
   const isOffline = () => !navigator.onLine || S.netBad;
   let lastMode = '';
   async function applyBase() {
-    if (BASES[S.base] && BASES[S.base].google) S.base = 'dark';
     let b = BASES[S.base] || BASES.dark;
     const auto = isOffline() && !b.vector;
     if (b.vector || auto) {
@@ -1037,7 +1037,7 @@
   $('#btnLayers').onclick = () => {
     const m = modal('<h3>Mapa y capas</h3><p class="lead">Elige el fondo y qué mostrar sobre el mapa.</p><div id="lyB"></div><div class="sep"></div><div id="lyL"></div><div class="legend"><span><i class="dot"></i>Caja</span><span><i class="dot nodo"></i>Nodo / cabina</span><span><i class="dot nueva"></i>Nueva</span></div>');
     const render = () => {
-      const keys = ['auto', 'dark', 'light', 'esri', 'sat', 'sath', 'none'];
+      const keys = ['auto', 'dark', 'light', 'esri', 'sat', 'sath', 'gmap', 'gsat', 'none'];
       const lab = k => k === 'auto' ? 'Automático · día y noche' : BASES[k].label;
       const sub = k => k === 'auto' ? '<small>Claro de día y oscuro de noche, según el sol</small>' : k === 'none' ? '<small>No descarga nada · ideal sin señal</small>' : '';
       const on = k => k === 'auto' ? (S.themeMode === 'auto' && (S.base === 'dark' || S.base === 'light')) : (k === 'dark' || k === 'light') ? (S.themeMode !== 'auto' && S.base === k) : S.base === k;
@@ -1095,7 +1095,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.7 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.9 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {

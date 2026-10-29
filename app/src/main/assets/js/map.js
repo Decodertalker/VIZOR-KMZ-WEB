@@ -66,7 +66,7 @@
       // camino corto alrededor del mundo
       if (tx - this.cx > 0.5) tx -= 1; else if (this.cx - tx > 0.5) tx += 1;
       this.anim = { t0: performance.now(), dur: dur || 650, from: { cx: this.cx, cy: this.cy, z: this.z }, to: { cx: tx, cy: ty, z } };
-      this.inertia = null; this._schedule();
+      this.inertia = null; this._warm(tx, ty, z); this._schedule();
     }
     fitBounds(minLat, minLon, maxLat, maxLon, pad) {
       pad = pad || 40;
@@ -129,7 +129,7 @@
       return t.st === 2 ? t : null;
     }
     _pump() {
-      while (this.inflight < 8 && this.queue.length) {
+      while (this.inflight < 12 && this.queue.length) {
         const t = this.queue.pop();
         if (t.st !== 0) continue;
         if (t.f < this.frame - 2) { this.tiles.delete(t.key); continue; } // ya no se ve
@@ -201,13 +201,30 @@
         }
         return false;
       };
-      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      // se piden primero los cuadros del centro y al final los de las orillas (la cola saca el último que entró)
+      const list = [];
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { const ex = (x + .5) / n - this.cx, ey = (y + .5) / n - this.cy; list.push([x, y, ex * ex + ey * ey]); }
+      list.sort((a, b) => b[2] - a[2]);
+      for (const [x, y] of list) {
         const wx = ((x % n) + n) % n;
         const dx = (x / n - this.cx) * this.s + this.w / 2, dy = (y / n - this.cy) * this.s + this.h / 2, sz = size + 0.6;
         const t = this._getTile(zi, wx, y, true, false, ov);
         if (t) { ctx.drawImage(t.img, dx, dy, sz, sz); continue; }
         under(wx, y, dx, dy, sz);
       }
+    }
+    /* Al volar a otra zona: se empiezan a bajar los cuadros del destino (y uno más lejano de relleno) mientras dura la animación */
+    _warm(cx, cy, z) {
+      const src = this.src; if (!src || this.gm || this.vec) return;
+      const zi = clamp(Math.round(z), src.minZoom || 0, src.maxZoom || 19);
+      for (const zz of [zi, Math.max(zi - 3, 0)]) {
+        const n = Math.pow(2, zz), hx = this.w / 2 / (TS * Math.pow(2, z)) * n, hy = this.h / 2 / (TS * Math.pow(2, z)) * n, tx = cx * n, ty = cy * n, list = [];
+        for (let y = Math.max(0, Math.floor(ty - hy)); y <= Math.min(n - 1, Math.floor(ty + hy)); y++) for (let x = Math.floor(tx - hx); x <= Math.floor(tx + hx); x++) list.push([x, y, (x + .5 - tx) ** 2 + (y + .5 - ty) ** 2]);
+        if (list.length > 90) continue;
+        list.sort((a, b) => b[2] - a[2]);
+        for (const [x, y] of list) { const wx = ((x % n) + n) % n; this._getTile(zz, wx, y, true, false, false); const t = this.tiles.get(zz + '/' + wx + '/' + y); if (t) t.f = this.frame + 90; }
+      }
+      this._pump();
     }
 
     /* ---- dibujo ---- */
