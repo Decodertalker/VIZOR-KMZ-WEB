@@ -104,3 +104,8 @@ PASO OBLIGATORIO: ejecutar 6_notificaciones.sql en Supabase.
 - Cajas agrupadas cuando estás alejado: aparecen círculos con la cantidad; toca uno para acercar. Al acercarte (zoom ~14.5) se ven las cajas sueltas, ahora con borde para verse mejor.
 - Girar el mapa con dos dedos (en computadora: Mayús + rueda del mouse). Aparece una brújula en los botones de la derecha para volver al norte; también se vuelve sola al norte si sueltas casi derecho. Los textos y números siempre se ven derechos.
 - Nota: los mapas de CARTO son gratis con atribución, pero su uso intensivo/comercial puede requerir un plan; si lo prefieres, usa "Calles OpenStreetMap" o "Satélite".
+
+=== VERSION 3.7: CORRECCIÓN DE FONDOS ===
+- CARTO empezó a exigir clave API (salía "API KEY REQUIRED"). Se quitó por completo. "Oscuro" y "Calles" vuelven a OpenStreetMap, como antes de la 3.6.
+- "Satélite con nombres" ahora usa los nombres de Esri (sin clave). Nueva opción "Calles Esri (colores suaves)".
+- Se mantienen: agrupación de cajas, giro del mapa y brújula de la 3.6.

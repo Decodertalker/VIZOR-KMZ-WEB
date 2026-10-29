@@ -45,7 +45,7 @@
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ layers: S.layers, base: S.base, theme: S.theme, themeMode: S.themeMode, radius: S.radius, gkey: S.gkey || '', nbMode: S.nbMode, autoOrd: S.autoOrd })); } catch (e) { }
   }
 
-  const lightMap = () => S.base === 'light' || S.base === 'osm' || S.theme === 'light';
+  const lightMap = () => S.base === 'light' || S.base === 'esri' || S.theme === 'light';
   /* ---- capa "Rutas de evaluación": apagada para el administrador (elige técnicos), encendida para el técnico ---- */
   S.evShow = new Set();
   const RCOL = ['#ff5d8f', '#22c55e', '#38bdf8', '#ffb547', '#a78bfa', '#f97316', '#14b8a6', '#eab308'];
@@ -81,11 +81,11 @@
   }
 
   const BASES = {
-    dark: { label: 'Oscuro', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', maxZoom: 20, r2: true, attr: '© OpenStreetMap · © CARTO', bg: '#0f1217', grid: 'rgba(255,255,255,.04)' },
-    light: { label: 'Calles', url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', maxZoom: 20, r2: true, attr: '© OpenStreetMap · © CARTO', bg: '#f2efe9', grid: 'rgba(20,30,50,.06)' },
-    osm: { label: 'Calles OpenStreetMap', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', maxZoom: 19, attr: '© OpenStreetMap', bg: '#e9edf2', grid: 'rgba(20,30,50,.06)' },
+    dark: { label: 'Oscuro', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', maxZoom: 19, filter: 'invert(1) hue-rotate(180deg) brightness(.92) contrast(.95) saturate(.8)', attr: '© OpenStreetMap', bg: '#0b1220', grid: 'rgba(255,255,255,.045)' },
+    light: { label: 'Calles', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', maxZoom: 19, attr: '© OpenStreetMap', bg: '#e9edf2', grid: 'rgba(20,30,50,.06)' },
+    esri: { label: 'Calles Esri (colores suaves)', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', maxZoom: 19, attr: 'Esri, HERE, Garmin, OpenStreetMap', bg: '#e9edf2', grid: 'rgba(20,30,50,.06)' },
     sat: { label: 'Satélite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maxZoom: 19, ph: true, attr: 'Esri, Maxar, Earthstar Geographics', bg: '#101820', grid: 'rgba(255,255,255,.05)' },
-    sath: { label: 'Satélite con nombres', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', overlay: 'https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', ovMax: 20, maxZoom: 19, ph: true, r2: true, attr: 'Esri, Maxar, Earthstar Geographics · © CARTO', bg: '#101820', grid: 'rgba(255,255,255,.05)' },
+    sath: { label: 'Satélite con nombres', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', overlay: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', ovMax: 18, maxZoom: 19, ph: true, attr: 'Esri, Maxar, Earthstar Geographics', bg: '#101820', grid: 'rgba(255,255,255,.05)' },
     gmap: { label: 'Google Maps · Mapa', google: true, gtype: 'roadmap', attr: '' },
     gsat: { label: 'Google Maps · Satélite', google: true, gtype: 'hybrid', attr: '' },
     vec: { label: 'Calles sin conexión', vector: true, attr: '© OpenStreetMap · Protomaps' },
@@ -1037,7 +1037,7 @@
   $('#btnLayers').onclick = () => {
     const m = modal('<h3>Mapa y capas</h3><p class="lead">Elige el fondo y qué mostrar sobre el mapa.</p><div id="lyB"></div><div class="sep"></div><div id="lyL"></div><div class="legend"><span><i class="dot"></i>Caja</span><span><i class="dot nodo"></i>Nodo / cabina</span><span><i class="dot nueva"></i>Nueva</span></div>');
     const render = () => {
-      const keys = ['auto', 'dark', 'light', 'osm', 'sat', 'sath', 'none'];
+      const keys = ['auto', 'dark', 'light', 'esri', 'sat', 'sath', 'none'];
       const lab = k => k === 'auto' ? 'Automático · día y noche' : BASES[k].label;
       const sub = k => k === 'auto' ? '<small>Claro de día y oscuro de noche, según el sol</small>' : k === 'none' ? '<small>No descarga nada · ideal sin señal</small>' : '';
       const on = k => k === 'auto' ? (S.themeMode === 'auto' && (S.base === 'dark' || S.base === 'light')) : (k === 'dark' || k === 'light') ? (S.themeMode !== 'auto' && S.base === k) : S.base === k;
@@ -1067,7 +1067,7 @@
         S.netBad = false; clearInterval(probeT); map._fails = 0; map._okAt = performance.now(); netState();
         if (k === 'auto') { S.themeMode = 'auto'; if (S.base !== 'dark' && S.base !== 'light') S.base = 'dark'; autoTheme(); }
         else if (k === 'dark' || k === 'light') { S.themeMode = k; S.base = k; S.theme = k; applyBase(); }
-        else { S.base = k; if (k === 'osm') S.theme = 'light'; applyBase(); }
+        else { S.base = k; if (k === 'esri') S.theme = 'light'; applyBase(); }
         saveSettings(); render();
       }
       if (l) { const k = l.dataset.l; S.layers[k] = k === 'evals' ? S.layers.evals === false : !S.layers[k]; saveSettings(); map.invalidate(); render(); }
@@ -1095,7 +1095,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.6 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.7 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {
