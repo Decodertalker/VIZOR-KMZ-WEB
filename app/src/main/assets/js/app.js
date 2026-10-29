@@ -41,8 +41,9 @@
     showLine: true, pin: null, evals: [], team: { on: false, list: [], t: 0 }, groups: new Map(), munis: new Map(), seedName: 'GLOBAL ZONA NORTE 1'
   };
   try { Object.assign(S, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'), { sel: null }); } catch (e) { }
+  if (!S.gdef) { S.gdef = 1; if (window.CAJAS_GKEY || S.gkey) S.base = 'gmap'; }   // Google Maps como mapa por defecto (una sola vez; después se respeta lo que elijan)
   function saveSettings() {
-    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ layers: S.layers, base: S.base, theme: S.theme, themeMode: S.themeMode, radius: S.radius, gkey: S.gkey || '', nbMode: S.nbMode, autoOrd: S.autoOrd })); } catch (e) { }
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ layers: S.layers, base: S.base, theme: S.theme, themeMode: S.themeMode, radius: S.radius, gkey: S.gkey || '', nbMode: S.nbMode, autoOrd: S.autoOrd, gdef: S.gdef })); } catch (e) { }
   }
 
   const lightMap = () => S.base === 'light' || S.base === 'esri' || S.theme === 'light';
@@ -146,7 +147,7 @@
       const sc = document.createElement('script');
       sc.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(key) + '&callback=__gmReady&v=weekly&language=es';
       sc.onerror = () => { gLoading = null; rej(new Error('red')); };
-      setTimeout(() => { if (!(window.google && window.google.maps)) { gLoading = null; rej(new Error('tiempo')); } }, 15000);
+      setTimeout(() => { if (!(window.google && window.google.maps)) { gLoading = null; rej(new Error('tiempo')); } }, 8000);
       document.head.appendChild(sc);
     });
     return gLoading;
@@ -158,7 +159,8 @@
     try { await loadGoogle(gk); } catch (e) { toast('No se pudo cargar Google Maps', 3000); return false; }
     if (!gmap) {
       const c = map.center();
-      gmap = new google.maps.Map($('#gmap'), { center: { lat: c.lat, lng: c.lon }, zoom: Math.round(map.z), disableDefaultUI: true, gestureHandling: 'greedy', clickableIcons: false, keyboardShortcuts: false, mapTypeId: type });
+      const gv = google.maps.RenderingType ? { renderingType: google.maps.RenderingType.VECTOR } : {};
+      gmap = new google.maps.Map($('#gmap'), { mapId: window.CAJAS_GMAPID || 'DEMO_MAP_ID', ...gv, center: { lat: c.lat, lng: c.lon }, zoom: map.z, disableDefaultUI: true, gestureHandling: 'greedy', clickableIcons: false, keyboardShortcuts: false, mapTypeId: type });
       $('#gmap').hidden = false; map.attachGoogle(gmap);
     } else { $('#gmap').hidden = false; gmap.setMapTypeId(type); map.attachGoogle(gmap); }
     return true;
@@ -200,6 +202,9 @@
     if (lastMode === 'vec-auto' && !auto) toast('Conexión recuperada: mapa en línea', 2500);
     lastMode = 'online';
     if (b.google) {
+      if (!(window.google && window.google.maps) && !gmap) {   // mientras carga Google se ve el mapa propio (así no queda en blanco)
+        const f = BASES.dark; map.setSource({ url: f.url, maxZoom: f.maxZoom, minZoom: 0, filter: f.filter || '' }); $('#attrib').textContent = f.attr; applyTheme();
+      }
       if (await useGoogle(b.gtype)) { map.setSource(null); $('#attrib').textContent = ''; applyTheme(); return; }
       b = BASES.dark;
     }
@@ -1095,7 +1100,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.10 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.11 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {

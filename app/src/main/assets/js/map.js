@@ -80,27 +80,38 @@
     /* ---- Google Maps como mapa base: Google maneja gestos y dibujo del fondo; este canvas dibuja encima ---- */
     attachGoogle(gm) {
       if (this.gm === gm) return;
-      this.cv.style.pointerEvents = 'none';   // con Google, los gestos (arrastrar, zoom) los recibe Google; este lienzo solo dibuja encima
+      this.gOwn = false; this.cv.style.pointerEvents = 'none';   // por defecto Google recibe los gestos; este lienzo solo dibuja encima
       this.gm = gm; this.rot = 0; this.rotT = null; this.onRot && this.onRot(0); this.src = null; this.tiles.clear(); this.queue = [];
       if (!this._gl) {
         this._gl = 1;
+        // Mapa vectorial de Google: admite zoom fraccionado, así que lo manejo yo con mis propios gestos (mismo cuadro = elementos perfectamente sincronizados)
+        this._gType = () => { try { return gm.getRenderingType ? gm.getRenderingType() : 'RASTER'; } catch (e) { return 'RASTER'; } };
+        this._gMode = () => {
+          const own = this._gType() === 'VECTOR';
+          if (own === this.gOwn) return; this.gOwn = own;
+          try { gm.setOptions({ gestureHandling: own ? 'none' : 'greedy' }); } catch (e) { }
+          this.cv.style.pointerEvents = own ? '' : 'none';
+          if (own) this._push(true);
+          this.onGoogleMode && this.onGoogleMode(own); this.invalidate();
+        };
+        gm.addListener('renderingtype_changed', () => this._gMode());
         gm.addListener('dragstart', () => this.onUserMove && this.onUserMove());
         gm.addListener('zoom_changed', () => { if (performance.now() > this._hold && this.onUserMove) this.onUserMove(); });
-        gm.addListener('click', e => { if (!e.latLng || !this.onTap) return; const p = this.toScreen(e.latLng.lat(), e.latLng.lng()); this.onTap(p[0], p[1]); });
+        gm.addListener('click', e => { if (this.gOwn || !e.latLng || !this.onTap) return; const p = this.toScreen(e.latLng.lat(), e.latLng.lng()); this.onTap(p[0], p[1]); });
         const loop = () => { this._poll(); requestAnimationFrame(loop); };
         requestAnimationFrame(loop);
       }
-      this._push(true); this.invalidate();
+      this._push(true); this.invalidate(); setTimeout(() => this._gMode && this._gMode(), 400); setTimeout(() => this._gMode && this._gMode(), 1500);
     }
     setVector(v) { this.vec = v || null; this.invalidate(); }
-    detachGoogle() { this.gm = null; this.cv.style.pointerEvents = ''; this.invalidate(); }
+    detachGoogle() { this.gm = null; this.gOwn = false; this.cv.style.pointerEvents = ''; this.invalidate(); }
     _push(force) {
       if (!this.gm) return;
       this._hold = performance.now() + 300;
       try { this.gm.moveCamera({ center: { lat: latOf(this.cy), lng: lonOf(this.cx) }, zoom: this.z }); } catch (e) { }
     }
     _poll() {
-      if (!this.gm || this.anim || performance.now() < this._hold) return;
+      if (!this.gm || this.gOwn || this.anim || performance.now() < this._hold) return;
       const c = this.gm.getCenter(), z = this.gm.getZoom(); if (!c || z == null) return;
       const nx = mxOf(c.lng()), ny = myOf(c.lat());
       if (Math.abs(nx - this.cx) * this.s > 0.3 || Math.abs(ny - this.cy) * this.s > 0.3 || Math.abs(z - this.z) > 0.001) {
@@ -265,6 +276,7 @@
       const ctx = this.ctx, dpr = this.dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       if (this.vec) { if (this.rot) { ctx.fillStyle = this.bg; ctx.fillRect(0, 0, this.w, this.h); this._rotOn(ctx); } this.vec.draw(ctx, this); this.onDraw && this.onDraw(ctx, this); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); return; }
+      if (this.gm && this.gOwn) this._push();   // la cámara de Google se mueve en este mismo cuadro, antes de dibujar encima
       if (this.gm) ctx.clearRect(0, 0, this.w, this.h);
       else {
         ctx.fillStyle = this.bg; ctx.fillRect(0, 0, this.w, this.h);

@@ -128,3 +128,8 @@ PASO OBLIGATORIO: ejecutar 6_notificaciones.sql en Supabase.
 === VERSION 3.10: GOOGLE MAPS SE PUEDE MOVER ===
 - Con "Google Maps" el mapa no se dejaba arrastrar con el mouse (el lienzo propio tapaba al de Google). Ahora Google recibe los gestos: arrastrar, zoom con rueda, doble clic, y las cajas se siguen tocando.
 - Se corrigió pages.yml (cancel-in-progress: false) para evitar el error "in progress deployment".
+
+=== VERSION 3.11: GOOGLE POR DEFECTO Y MÁS FLUIDO ===
+- Google Maps es ahora el mapa por defecto (web y APK) la primera vez; si el usuario elige otro, se respeta. Mientras Google carga se ve el mapa propio; sin internet o si Google falla, vuelve al mapa propio / de calles sin conexión.
+- Fluidez: el mapa de Google se pide en modo vectorial. En ese modo los gestos (arrastrar, pellizcar, rueda, doble toque) los maneja la app y mueve la cámara de Google en el mismo cuadro en que dibuja las cajas, así no hay desfase al hacer zoom. Si el equipo no soporta el modo vectorial (WebGL), se mantiene el funcionamiento anterior.
+- Opcional: poner un Map ID vectorial propio en js/config.js (CAJAS_GMAPID). Se crea gratis en Google Cloud > Administración de mapas.
