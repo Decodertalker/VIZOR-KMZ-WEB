@@ -33,6 +33,8 @@
     bad_name: 'Escribe el nombre completo', weak_password: 'La contraseña es muy corta (mínimo 8 para la tuya, 6 para una inicial)',
     bad_items: 'Datos no válidos', cannot_delete_self: 'No puedes eliminar ni suspender tu propia cuenta', not_found: 'El usuario ya no existe', bad_location: 'Ubicación no válida',
     bad_comment: 'Escribe un comentario (máximo 1500 letras)',
+    forbidden_admin: 'Solo el administrador principal puede eliminar administradores', cannot_delete_main: 'El administrador principal no se puede eliminar',
+    bad_version: 'Escribe el nombre de la versión (por ejemplo 3.12)', bad_code: 'El número de versión debe ser un entero mayor que 0', bad_url: 'El enlace debe empezar con https://',
     network: 'No hay conexión con el servidor. Revisa tu internet', config: 'Falta configurar el servidor'
   };
   const errText = e => MSG[e && e.code] || (e && e.message) || 'Error desconocido';
@@ -110,6 +112,10 @@
     setActive: (id, on) => rpc('cj_set_active', { p_token: tk(), p_id: id, p_active: !!on }),
     sendLocation: (lat, lon, acc, speed) => rpc('cj_send_location', { p_token: tk(), p_lat: lat, p_lon: lon, p_acc: acc == null ? null : acc, p_speed: speed == null || !isFinite(speed) ? null : speed }, 10000),
     locations: () => rpc('cj_locations', { p_token: tk() }),
+    releaseGet: () => rpc('cj_release_get', { p_token: tk() }),
+    releasePublish: (version, code, url, notes, mandatory) => rpc('cj_release_publish', { p_token: tk(), p_version: version, p_code: code, p_url: url, p_notes: notes || '', p_mandatory: !!mandatory }),
+    uploadLog: (name, boxes, areas, routes) => rpc('cj_upload_log', { p_token: tk(), p_name: name, p_boxes: boxes | 0, p_areas: areas | 0, p_routes: routes | 0 }),
+    uploadsList: () => rpc('cj_uploads_list', { p_token: tk() }),
     pull: (ts, u, limit) => rpc('cj_pull', { p_token: tk(), p_ts: ts, p_u: u, p_limit: limit || 200 }, 40000),
     push: items => rpc('cj_push', { p_token: tk(), p_items: items }, 60000)
   };

@@ -133,3 +133,14 @@ PASO OBLIGATORIO: ejecutar 6_notificaciones.sql en Supabase.
 - Google Maps es ahora el mapa por defecto (web y APK) la primera vez; si el usuario elige otro, se respeta. Mientras Google carga se ve el mapa propio; sin internet o si Google falla, vuelve al mapa propio / de calles sin conexión.
 - Fluidez: el mapa de Google se pide en modo vectorial. En ese modo los gestos (arrastrar, pellizcar, rueda, doble toque) los maneja la app y mueve la cámara de Google en el mismo cuadro en que dibuja las cajas, así no hay desfase al hacer zoom. Si el equipo no soporta el modo vectorial (WebGL), se mantiene el funcionamiento anterior.
 - Opcional: poner un Map ID vectorial propio en js/config.js (CAJAS_GMAPID). Se crea gratis en Google Cloud > Administración de mapas.
+
+=== VERSION 3.12: ADMINISTRADOR PRINCIPAL, ACTUALIZACIONES Y KMZ ===
+PASO OBLIGATORIO: ejecutar 7_admin_principal.sql en Supabase (después de 1_ a 6_).
+- Se quitaron los círculos de cajas agrupadas (web y app): vuelven a verse las cajas sueltas.
+- Administrador principal = el usuario "admin". Solo él puede:
+  · Eliminar perfiles de administrador (los demás administradores ya no ven ese botón, y el servidor también lo rechaza).
+  · Publicar actualizaciones (Menú > Publicar actualización): versión, número de versión (mayor al anterior), enlace https de descarga del APK, notas y si es obligatoria.
+  · Ver "KMZ subidos (detalle)": cada archivo con lo que contiene, quién y cuándo lo subió; entrar al detalle (cajas / áreas / rutas, con buscador) y eliminar una por una, por grupo o el archivo completo.
+- Aplicación Android: Menú > "Buscar actualización" (para todos los usuarios). Además la app avisa sola: una notificación "Nueva versión X disponible" (el servicio de fondo revisa cada ~40 s) y, al abrir la app, una ventana con el botón "Descargar e instalar" (abre el enlace del APK; al terminar se toca el archivo y se instala encima, sin perder datos). Si la marcas obligatoria, no se puede cerrar la ventana.
+- Cómo publicar una versión: 1) compilar el APK en GitHub (Actions) 2) subirlo a una Release de GitHub (o Drive) y copiar el enlace directo https 3) Menú > Publicar actualización.
+- Los administradores también reciben ahora el servicio de avisos (para las actualizaciones).

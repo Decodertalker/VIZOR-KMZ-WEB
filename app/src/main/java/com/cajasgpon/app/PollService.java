@@ -30,7 +30,7 @@ public class PollService extends Service {
         Notification n = new Notification.Builder(this, Notifier.SVC_CHANNEL)
                 .setSmallIcon(android.R.drawable.ic_dialog_map)
                 .setContentTitle("Vizor G")
-                .setContentText("Atento a nuevas asignaciones")
+                .setContentText("Atento a asignaciones y actualizaciones")
                 .setContentIntent(pi)
                 .setOngoing(true)
                 .build();

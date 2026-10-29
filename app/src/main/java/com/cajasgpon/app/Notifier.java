@@ -26,6 +26,7 @@ import java.util.Set;
 final class Notifier {
     static final String CHANNEL = "asignaciones";
     static final String SVC_CHANNEL = "servicio";
+    static final String NEWS_CHANNEL = "novedades";
     static final String PREFS = "vizor_native";
     static final int JOB_ID = 4711;
 
@@ -59,6 +60,55 @@ final class Notifier {
         try {
             JobScheduler js = (JobScheduler) c.getSystemService(Context.JOB_SCHEDULER_SERVICE);
             if (js != null) js.cancel(JOB_ID);
+        } catch (Exception ignored) {
+        }
+    }
+
+    static int versionCode(Context c) {
+        try {
+            android.content.pm.PackageInfo pi = c.getPackageManager().getPackageInfo(c.getPackageName(), 0);
+            return (int) pi.getLongVersionCode();
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
+
+    /** Aviso de "nueva versión disponible" (publicada por el administrador principal). Se toca y abre la app, que ofrece descargar. */
+    static void showUpdate(Context c, String title, String text) {
+        NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm == null || !nm.areNotificationsEnabled()) return;
+        nm.createNotificationChannel(new NotificationChannel(NEWS_CHANNEL, "Actualizaciones", NotificationManager.IMPORTANCE_HIGH));
+        Intent open = new Intent(c, MainActivity.class);
+        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent pi = PendingIntent.getActivity(c, 2, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        Notification n = new Notification.Builder(c, NEWS_CHANNEL)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setContentTitle(title)
+                .setContentText(text)
+                .setStyle(new Notification.BigTextStyle().bigText(text))
+                .setContentIntent(pi)
+                .setAutoCancel(true)
+                .build();
+        nm.notify(4713, n);
+    }
+
+    /** Revisa si el administrador principal publicó una versión más nueva y avisa una sola vez por versión. */
+    static void checkRelease(Context c, boolean notify) {
+        SharedPreferences p = prefs(c);
+        String url = p.getString("url", ""), key = p.getString("key", ""), token = p.getString("token", "");
+        if (url.length() == 0 || token.length() == 0) return;
+        try {
+            String res = post(url + "/rest/v1/rpc/cj_release_get", key, new JSONObject().put("p_token", token).toString()).trim();
+            if (res.length() == 0 || res.equals("null")) return;
+            JSONObject o = new JSONObject(res);
+            int code = o.optInt("code", 0);
+            if (notify && code > versionCode(c) && code != p.getInt("relNote", 0)) {
+                p.edit().putInt("relNote", code).apply();
+                {
+                    String notes = o.optString("notes", "");
+                    showUpdate(c, "Nueva versión " + o.optString("version", "") + " disponible", notes.length() > 0 ? notes : "Toca para descargarla e instalarla.");
+                }
+            }
         } catch (Exception ignored) {
         }
     }
@@ -202,6 +252,7 @@ final class Notifier {
 
     /** Consulta las evaluaciones asignadas a este técnico y avisa de las nuevas. */
     static void poll(Context c, boolean notify) {
+        checkRelease(c, notify);
         SharedPreferences p = prefs(c);
         String url = p.getString("url", ""), key = p.getString("key", ""), token = p.getString("token", "");
         if (url.length() == 0 || token.length() == 0) return;

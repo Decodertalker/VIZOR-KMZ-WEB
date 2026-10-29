@@ -296,7 +296,7 @@ public class MainActivity extends Activity {
         /** Guarda la sesión del técnico para poder avisarle de nuevas asignaciones aunque la app esté cerrada. */
         @JavascriptInterface
         public void setAuth(final String url, final String key, final String token, final String userId, final String role) {
-            if (!"tecnico".equals(role)) {
+            if (!"tecnico".equals(role) && !"admin".equals(role)) {
                 Notifier.clearAuth(getApplicationContext());
                 return;
             }
@@ -316,6 +316,20 @@ public class MainActivity extends Activity {
                     Notifier.poll(getApplicationContext(), false);
                 }
             }).start();
+        }
+
+        @JavascriptInterface
+        public int versionCode() {
+            return Notifier.versionCode(getApplicationContext());
+        }
+
+        @JavascriptInterface
+        public String versionName() {
+            try {
+                return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            } catch (Exception e) {
+                return "";
+            }
         }
 
         @JavascriptInterface

@@ -393,23 +393,12 @@
 
     if (L.cajas) {
       const r = z < 11 ? 2.2 : z < 13 ? 3.2 : z < 15 ? 4.6 : z < 17 ? 6.5 : 8;
-      const sets = { caja: [], nodo: [], nueva: [] }, edited = [], clu = z < 14.5, cells = clu ? new Map() : null;
+      const sets = { caja: [], nodo: [], nueva: [] }, edited = [];
       for (const p of S.pts) {
         if (p.mx < b.x0 || p.mx > b.x1 || p.my < b.y0 || p.my > b.y1) continue;
         const x = (p.mx - m.cx) * s + m.w / 2, y = (p.my - m.cy) * s + m.h / 2;
-        if (clu && p !== sel) {
-          const ck = Math.floor(x / 58) + ',' + Math.floor(y / 58); let c = cells.get(ck);
-          if (!c) { c = { n: 0, sx: 0, sy: 0, mx: 0, my: 0, p, x, y }; cells.set(ck, c); }
-          c.n++; c.sx += x; c.sy += y; c.mx += p.mx; c.my += p.my; continue;
-        }
         sets[kindOf(p)].push(p, x, y); if (p.st === 'edit') edited.push(x, y);
       }
-      const clusters = [];
-      if (clu) for (const c of cells.values()) {
-        if (c.n === 1) { sets[kindOf(c.p)].push(c.p, c.x, c.y); if (c.p.st === 'edit') edited.push(c.x, c.y); }
-        else clusters.push({ x: c.sx / c.n, y: c.sy / c.n, n: c.n, mx: c.mx / c.n, my: c.my / c.n, r: 11 + Math.min(11, Math.log2(c.n) * 2.2) });
-      }
-      S._cl = clusters;
       for (const k of ['caja', 'nodo', 'nueva']) {
         const a = sets[k]; if (!a.length) continue;
         ctx.beginPath();
@@ -420,11 +409,6 @@
       if (edited.length) {
         ctx.beginPath(); for (let i = 0; i < edited.length; i += 2) { ctx.moveTo(edited[i] + r + 3, edited[i + 1]); ctx.arc(edited[i], edited[i + 1], r + 3, 0, 6.2832); }
         ctx.strokeStyle = COL.nueva; ctx.lineWidth = 2; ctx.stroke();
-      }
-      for (const c of clusters) {
-        ctx.beginPath(); ctx.arc(c.x, c.y, c.r + 4, 0, 6.2832); ctx.fillStyle = hexA(COL.accent, .25); ctx.fill();
-        ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, 6.2832); ctx.fillStyle = hexA(COL.accent, .95); ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = lightMap() ? 'rgba(255,255,255,.95)' : 'rgba(8,14,26,.85)'; ctx.stroke();
-        up(c.x, c.y, (x, y) => { ctx.font = '800 12px ui-rounded,system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#04141f'; ctx.fillText(c.n >= 1000 ? Math.round(c.n / 100) / 10 + 'k' : c.n, x, y + .5); ctx.textAlign = 'start'; });
       }
       if (L.etiquetas && z >= 17) {
         labelsSeen.clear(); ctx.font = '600 12px ui-rounded,system-ui,sans-serif'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3.5; ctx.lineJoin = 'round';
@@ -584,9 +568,6 @@
     }
     const ht = hitTeam(px, py); if (ht) { openUserDetail(ht); return; }
     const he = hitEval(px, py); if (he) { openEvalDetail(he); return; }
-    if (S.layers.cajas && S._cl && map.z < 14.5) {   // toque en un grupo de cajas: acercar
-      for (const c of S._cl) if (Math.hypot(c.x - px, c.y - py) <= c.r + 8) { const ll = { lat: Merc.latOf(c.my), lon: Merc.lonOf(c.mx) }; map.flyTo(ll.lat, ll.lon, Math.min(map.z + 2.4, 17), 0.5, 450); return; }
-    }
     const h = hitPoint(px, py);
     if (h) select(h, true, true); else if (S.sel) deselect();
   };
@@ -1088,6 +1069,8 @@
     const cu = Cloud.user(), adm = cu && cu.role === 'admin', isT = cu && !adm;
     const nEv = S.evals.length, pEv = S.evals.filter(e => e.estado !== 'hecha').length;
     const items = [
+      ...(cu && NB ? [['download', 'Buscar actualización', 'Versión instalada: ' + instName(), 'upd']] : []),
+      ...(isSuper() ? [['upload', 'Publicar actualización', 'Avisa a todas las aplicaciones que hay una versión nueva', 'relpub'], ['box', 'KMZ subidos (detalle)', 'Quién subió qué, y eliminar a detalle', 'kmzlog']] : []),
       ...(adm ? [['team', 'Administración', 'Usuarios y ubicación del equipo', 'admin'], ['clip', 'Asignaciones', 'Asignar evaluaciones y rutas a los técnicos', 'asig'], ['box', 'Datos de cajas y KMZ', 'Ver, agregar y eliminar lo que se sincroniza', 'datos']] : []),
       ...(cu ? [['reset', 'Sincronización automática', SY.err ? 'Error: ' + SY.err + ' · toca para reintentar' : (SY.t ? 'Al día · última vez ' + ago(SY.t) : 'Web y app comparten los mismos datos'), 'sync']] : []),
       ...(cu ? [['user', 'Mi cuenta', cu.name + ' · ' + (cu.role === 'admin' ? 'Administrador' : 'Técnico'), 'acct']] : (Cloud.configured() ? [] : [['user', 'Conectar servidor', 'Activa usuarios, administrador y ubicación del equipo', 'srv']])),
@@ -1100,7 +1083,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.11 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.12 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {
@@ -1111,6 +1094,9 @@
       if (a === 'asig') openAssign();
       if (a === 'sync') { await syncNow(true); toast(SY.err ? 'No se pudo sincronizar: ' + SY.err : 'Sincronizado', 3000); }
       if (a === 'acct') openAccount();
+      if (a === 'upd') checkRelease(true);
+      if (a === 'relpub') openRelease();
+      if (a === 'kmzlog') openKmzLog();
       if (a === 'nbtest') { toast('Probando…', 1500); try { NB.testNotify(); } catch (e) { toast('No disponible en esta versión', 3000); } }
       if (a === 'srv') openServer();
       if (a === 'imp') $('#fileIn').click();
@@ -1120,6 +1106,99 @@
       if (a === 'vecinfo') { await ensureVector(); toast(VEC ? 'Mapa de calles listo. Se usa solo, sin internet.' : 'Esta versión no trae el mapa de calles sin conexión', 4000); }
       if (a === 'theme') { S.themeMode = { auto: 'light', light: 'dark', dark: 'auto' }[S.themeMode]; saveSettings(); autoTheme(); toast('Tema: ' + THEME_LABEL[S.themeMode]); }
       if (a === 'inst' && installEv) { installEv.prompt(); installEv = null; }
+    };
+  }
+
+  /* ---------- administrador principal · actualizaciones · KMZ subidos ---------- */
+  const APP_VER = '3.12';
+  const isSuper = () => { const u = Cloud.user(); return !!(u && u.role === 'admin' && (u.super || String(u.username || '').toLowerCase() === 'admin')); };
+  const instCode = () => { try { return NB && NB.versionCode ? +NB.versionCode() : 0; } catch (e) { return 0; } };
+  const instName = () => { try { return NB && NB.versionName ? String(NB.versionName()) : APP_VER; } catch (e) { return APP_VER; } };
+  const fdate = t => { try { return new Date(t).toLocaleString('es', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
+  let relSeen = 0;
+  function updateModal(r, manual) {
+    const m = modal('<h3>Nueva versión ' + esc(r.version) + '</h3><p class="lead">Tienes la ' + esc(instName()) + (r.mandatory ? ' · <b>actualización obligatoria</b>' : '') + '.</p>' +
+      (r.notes ? '<p class="lead" style="white-space:pre-line;text-align:left">' + esc(r.notes) + '</p>' : '') +
+      '<p class="lead">Se descargará el instalador. Al terminar, ábrelo y elige “Instalar”: se actualiza sobre la que ya tienes y no pierdes tus datos.</p>' +
+      '<div class="btnrow">' + (r.mandatory ? '' : '<button class="btn" id="upX">Más tarde</button>') + '<button class="btn accent" id="upGo">' + ic('download') + 'Descargar e instalar</button></div>');
+    hydrate(m);
+    const x = m.querySelector('#upX'); if (x) x.onclick = closeModal;
+    m.querySelector('#upGo').onclick = () => { openExt(r.url, r.url); if (!r.mandatory) closeModal(); };
+  }
+  async function checkRelease(manual) {
+    if (!Cloud.user() || !NB) return;
+    let r; try { r = await Cloud.releaseGet(); } catch (e) { if (manual) toast(Cloud.errText(e), 3500); return; }
+    const cur = instCode();
+    if (!r || !(r.code > cur)) { if (manual) { const m = modal('<h3>Estás al día</h3><p class="lead">Versión instalada: ' + esc(instName()) + (r ? ' · última publicada: ' + esc(r.version) : ' · el administrador aún no publicó actualizaciones') + '.</p><button class="btn wide" id="upOk">Cerrar</button>'); m.querySelector('#upOk').onclick = closeModal; } return; }
+    if (!manual && !r.mandatory && relSeen === r.code) return;
+    relSeen = r.code; updateModal(r, manual);
+  }
+  setTimeout(() => checkRelease(false), 6000);
+  setInterval(() => { if (!document.hidden) checkRelease(false); }, 10 * 60 * 1000);
+
+  async function openRelease() {
+    if (!isSuper()) return;
+    busy('Consultando…'); let cur = null; try { cur = await Cloud.releaseGet(); } catch (e) { idle(); toast(Cloud.errText(e), 3500); return; } idle();
+    const m = modal('<h3>Publicar actualización</h3><p class="lead">' + (cur ? 'Publicada ahora: <b>' + esc(cur.version) + '</b> (código ' + cur.code + ') · ' + fdate(cur.published_at) : 'Todavía no hay ninguna publicada.') + '<br>Al publicar, todas las aplicaciones reciben el aviso en menos de un minuto y se les ofrece descargarla.</p>' +
+      '<label class="field"><span>NOMBRE DE LA VERSIÓN</span><input id="rlV" placeholder="Ej. 3.12" autocomplete="off"></label>' +
+      '<label class="field"><span>NÚMERO DE VERSIÓN (versionCode, debe ser mayor al anterior)</span><input id="rlC" inputmode="numeric" value="' + (cur ? cur.code + 1 : (instCode() || 0) + 1) + '" autocomplete="off"></label>' +
+      '<label class="field"><span>ENLACE DE DESCARGA DEL APK (https://…)</span><input id="rlU" value="' + esc(cur ? cur.url : '') + '" placeholder="https://github.com/…/releases/download/…/app.apk" autocapitalize="none" spellcheck="false"></label>' +
+      '<label class="field"><span>NOTAS (OPCIONAL)</span><textarea id="rlN" placeholder="Qué cambió en esta versión"></textarea></label>' +
+      '<button class="opt" id="rlM"><b>Actualización obligatoria</b><span class="sw"></span></button>' +
+      '<div class="btnrow" style="margin-top:10px"><button class="btn" id="rlX">Cancelar</button><button class="btn accent" id="rlS">' + ic('upload') + 'Publicar</button></div>');
+    hydrate(m); const q = x => m.querySelector(x); let mand = false;
+    q('#rlM').onclick = () => { mand = !mand; q('#rlM').classList.toggle('on', mand); };
+    q('#rlX').onclick = closeModal;
+    q('#rlS').onclick = async () => {
+      const v = q('#rlV').value.trim(), c = parseInt(q('#rlC').value, 10), u = q('#rlU').value.trim();
+      if (!v) { toast('Escribe el nombre de la versión'); return; } if (!(c > 0)) { toast('El número de versión debe ser mayor que 0'); return; } if (!/^https:\/\//.test(u)) { toast('El enlace debe empezar con https://'); return; }
+      if (cur && c <= cur.code && !(await confirmBox('El número no es mayor al anterior', 'Las aplicaciones solo se actualizan si el número es MAYOR que el que tienen instalado. ¿Publicar de todos modos?', 'Publicar'))) return;
+      busy('Publicando…'); try { await Cloud.releasePublish(v, c, u, q('#rlN').value.trim(), mand); idle(); closeModal(); toast('Publicada la versión ' + v + '. Las aplicaciones recibirán el aviso', 4500); } catch (e) { idle(); toast(Cloud.errText(e), 4500); }
+    };
+  }
+
+  function srcGroups() {
+    const g = new Map(); S.feats.forEach(f => { const k = f.src || 'Sin origen'; const o = g.get(k) || { p: 0, a: 0, l: 0 }; o[f.t]++; g.set(k, o); }); return g;
+  }
+  async function openKmzLog() {
+    if (!isSuper()) return;
+    busy('Cargando historial…'); let log = []; try { log = await Cloud.uploadsList(); } catch (e) { log = null; } idle();
+    const groups = srcGroups(), rows = Array.from(groups);
+    const lastOf = k => (log || []).find(x => x.name === k);
+    const gone = (log || []).filter(x => !groups.has(x.name));
+    const m = modal('<h3>KMZ subidos</h3><p class="lead">Cada archivo con lo que contiene ahora. Entra al detalle para ver o eliminar cajas, áreas y rutas una por una, o elimina el archivo completo.' + (log === null ? '<br><b>Sin conexión: no se pudo cargar quién y cuándo lo subió.</b>' : '') + '</p><div id="klL"></div>' +
+      (gone.length ? '<div class="evfilter" style="margin:12px 0 4px"><b style="font-size:13px;color:var(--muted)">SUBIDOS ANTES · YA NO ESTÁN EN EL MAPA</b></div><div id="klG"></div>' : '') +
+      '<button class="btn wide" id="klX" style="margin-top:10px">Cerrar</button>');
+    hydrate(m);
+    m.querySelector('#klL').innerHTML = rows.map(([k, o]) => { const l = lastOf(k); return '<div class="urow"><div class="meta"><b>' + esc(k) + '</b><small>' + o.p.toLocaleString('es') + ' cajas · ' + o.a + ' áreas · ' + o.l + ' rutas' + (l ? '<br>Subido por ' + esc(l.by || '—') + ' · ' + fdate(l.at) : '') + '</small></div><button class="btn small" data-o="' + esc(k) + '">Detalle</button><button class="btn small danger" data-src="' + esc(k) + '">' + ic('trash') + '</button></div>'; }).join('') || '<p class="lead">No hay datos importados.</p>';
+    hydrate(m.querySelector('#klL'));
+    if (gone.length) m.querySelector('#klG').innerHTML = gone.map(x => '<div class="urow"><div class="meta"><b>' + esc(x.name) + '</b><small>' + x.boxes + ' cajas · ' + x.areas + ' áreas · ' + x.routes + ' rutas<br>' + esc(x.by || '—') + ' · ' + fdate(x.at) + '</small></div></div>').join('');
+    m.querySelector('#klX').onclick = closeModal;
+    m.querySelector('#klL').onclick = async ev => {
+      const o = ev.target.closest('[data-o]'), d = ev.target.closest('[data-src]');
+      if (o) openKmzDetail(o.dataset.o);
+      if (d) { const k = d.dataset.src, list = S.feats.filter(f => (f.src || 'Sin origen') === k); if (await confirmBox('¿Eliminar “' + k + '”?', 'Se borrarán ' + list.length.toLocaleString('es') + ' elementos de este archivo, también en la web y en los teléfonos. No se puede deshacer.', 'Eliminar todo', true)) { busy('Eliminando…'); await new Promise(r => setTimeout(r, 30)); await removeFeats(list); idle(); toast('Eliminado: ' + list.length + ' elementos'); openKmzLog(); } }
+    };
+  }
+  function openKmzDetail(k, tab, q0) {
+    tab = tab || 'p'; q0 = q0 || '';
+    const all = S.feats.filter(f => (f.src || 'Sin origen') === k), cnt = { p: 0, a: 0, l: 0 }; all.forEach(f => cnt[f.t]++);
+    const t = norm(q0), list = all.filter(f => f.t === tab && (!t || norm(f.n).includes(t)));
+    const lab = { p: 'Cajas', a: 'Áreas', l: 'Rutas' };
+    const m = modal('<h3>' + esc(k) + '</h3><div class="chips" id="kdT">' + ['p', 'a', 'l'].map(x => '<button class="chip' + (x === tab ? ' on' : '') + '" data-t="' + x + '">' + lab[x] + ' · ' + cnt[x].toLocaleString('es') + '</button>').join('') + '</div>' +
+      '<input class="evsearch" id="kdQ" placeholder="Buscar por nombre…" autocomplete="off" value="' + esc(q0) + '"><p class="lead" style="margin:6px 0">' + list.length.toLocaleString('es') + ' resultados' + (list.length > 80 ? ' · mostrando 80' : '') + '</p><div id="kdL"></div>' +
+      '<div class="btnrow" style="margin-top:10px"><button class="btn" id="kdB">Volver</button>' + (list.length ? '<button class="btn danger" id="kdAll">' + ic('trash') + 'Eliminar estos ' + list.length.toLocaleString('es') + '</button>' : '') + '</div>');
+    hydrate(m);
+    m.querySelector('#kdL').innerHTML = list.slice(0, 80).map(f => '<div class="urow"><div class="meta"><b>' + esc(f.n) + '</b><small>' + esc(subOf(f)) + '</small></div>' + (f.t === 'p' ? '<button class="btn small" data-v="' + f.id + '">' + ic('pin') + '</button>' : '') + '<button class="btn small danger" data-d="' + f.id + '">' + ic('trash') + '</button></div>').join('');
+    hydrate(m.querySelector('#kdL'));
+    m.querySelector('#kdT').onclick = ev => { const b = ev.target.closest('[data-t]'); if (b) openKmzDetail(k, b.dataset.t, ''); };
+    let tm = 0; m.querySelector('#kdQ').oninput = ev => { clearTimeout(tm); const v = ev.target.value; tm = setTimeout(() => { openKmzDetail(k, tab, v); const i = document.querySelector('#kdQ'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }, 450); };
+    m.querySelector('#kdB').onclick = () => openKmzLog();
+    const all2 = m.querySelector('#kdAll'); if (all2) all2.onclick = async () => { if (await confirmBox('¿Eliminar ' + list.length.toLocaleString('es') + ' ' + lab[tab].toLowerCase() + '?', 'Solo de “' + k + '”' + (q0 ? ' que coinciden con “' + q0 + '”' : '') + '. También en la web y en los teléfonos. No se puede deshacer.', 'Eliminar', true)) { busy('Eliminando…'); await new Promise(r => setTimeout(r, 30)); await removeFeats(list); idle(); toast('Eliminado: ' + list.length); openKmzDetail(k, tab, ''); } };
+    m.querySelector('#kdL').onclick = async ev => {
+      const v = ev.target.closest('[data-v]'), d = ev.target.closest('[data-d]');
+      if (v) { const f = S.feats.find(x => x.id === +v.dataset.v); if (f) { closeModal(); select(f, true); } }
+      if (d) { const f = S.feats.find(x => x.id === +d.dataset.d); if (f && await confirmBox('¿Eliminar ' + f.n + '?', 'Se quitará también en la web y en los teléfonos.', 'Eliminar', true)) { await removeFeats([f]); toast('Eliminado'); openKmzDetail(k, tab, q0); } }
     };
   }
 
@@ -1134,6 +1213,7 @@
         await new Promise(r => setTimeout(r, 30));
         const list = await KML.readFile(file); if (!list.length) { sum.names.push(file.name + ' (vacío)'); continue; }
         const r = await mergeFeats(list, file.name); ['add', 'upd', 'same', 'p', 'a', 'l'].forEach(k => sum[k] += r[k]); sum.names.push(file.name);
+        if (Cloud.user()) Cloud.uploadLog(file.name, r.p, r.a, r.l).catch(() => { });   // historial para el administrador principal
       }
       reindex(); updateNearby(); map.invalidate(); idle();
       modal('<h3>Importación lista</h3><p class="lead">' + esc(sum.names.join(', ')) + '</p><div class="kpis"><div class="stat"><small>Nuevos</small><b>' + sum.add + '</b></div><div class="stat"><small>Actualizados</small><b>' + sum.upd + '</b></div><div class="stat"><small>Sin cambios</small><b>' + sum.same + '</b></div></div>' +
@@ -1932,6 +2012,7 @@
       } catch (e) { btn.disabled = false; toast(Cloud.errText(e), 4000); }
     };
   }
+  const canDelUser = (u, self) => !self && !(u.role === 'admin' && (!isSuper() || u.super || String(u.username || '').toLowerCase() === 'admin'));
   function openUserDetail(u) {
     const me = Cloud.user(), self = me && u.id === me.id, has = u.lat != null, z = has ? zoneOf(u.lat, u.lon) : null;
     const d = has && S.pos ? fmtD(hav(S.pos.lat, S.pos.lon, u.lat, u.lon)) : '';
@@ -1939,7 +2020,7 @@
       '<div class="evinfo"><div><dt>Zona actual</dt><dd>' + esc(z ? z.zone : 'Sin ubicación todavía') + '</dd></div>' + (z && z.extra ? '<div><dt>Detalle</dt><dd>' + esc(z.extra) + '</dd></div>' : '') +
       '<div><dt>Última ubicación</dt><dd>' + ago(u.updated_at) + (has ? ' · ±' + Math.round(u.acc || 0) + ' m' + (d ? ' · a ' + d + ' de ti' : '') : '') + '</dd></div>' + (has ? '<div><dt>Coordenadas</dt><dd>' + coordTxt(u.lat, u.lon) + '</dd></div>' : '') + '</div>' +
       '<div class="d-actions"><button class="btn waze" id="udW"' + (has ? '' : ' disabled') + '>' + ic('nav') + 'Ir con Waze</button><button class="btn" id="udMap"' + (has ? '' : ' disabled') + '>' + ic('pin') + 'Ver en el mapa</button></div>' +
-      (isAdmin() ? '<div class="evgrid"><button class="btn ghost" id="udPw">' + ic('reset') + '<span>Contraseña</span></button><button class="btn ghost" id="udAct"' + (self ? ' disabled' : '') + '>' + ic('user') + '<span>' + (u.active === false ? 'Activar' : 'Suspender') + '</span></button><button class="btn ghost" id="udDel"' + (self ? ' disabled' : '') + '>' + ic('trash') + '<span>Eliminar</span></button></div>' : '') +
+      (isAdmin() ? '<div class="evgrid"><button class="btn ghost" id="udPw">' + ic('reset') + '<span>Contraseña</span></button><button class="btn ghost" id="udAct"' + (self ? ' disabled' : '') + '>' + ic('user') + '<span>' + (u.active === false ? 'Activar' : 'Suspender') + '</span></button>' + (canDelUser(u, self) ? '<button class="btn ghost" id="udDel">' + ic('trash') + '<span>Eliminar</span></button>' : '') + '</div>' : '') +
       '<button class="btn wide" id="udBack" style="margin-top:6px">' + (isAdmin() ? 'Volver a la lista' : 'Cerrar') + '</button>');
     hydrate(m); const q = s => m.querySelector(s);
     q('#udW').onclick = () => openExt('waze://?ll=' + u.lat + ',' + u.lon + '&navigate=yes', 'https://waze.com/ul?ll=' + u.lat + ',' + u.lon + '&navigate=yes&zoom=17');
@@ -1952,8 +2033,8 @@
         m2.querySelector('#rpS').onclick = async () => { const p = m2.querySelector('#rpP').value.trim(); try { await Cloud.resetPassword(u.id, p); await copyText('Vizor G\nUsuario: ' + u.username + '\nContraseña temporal: ' + p); toast('Contraseña cambiada y copiada', 3500); openAdmin(); } catch (e) { toast(Cloud.errText(e), 4000); } };
       };
       if (!self) {
+        if (q('#udDel')) q('#udDel').onclick = async () => { if (await confirmBox('¿Eliminar a ' + u.name + '?', 'Se borra su usuario y su última ubicación. Esto no se puede deshacer.', 'Eliminar', true)) { try { await Cloud.deleteUser(u.id); S.team.list = S.team.list.filter(x => x.id !== u.id); map.invalidate(); toast('Usuario eliminado'); openAdmin(); } catch (e) { toast(Cloud.errText(e), 4000); } } };
         q('#udAct').onclick = async () => { try { await Cloud.setActive(u.id, u.active === false); toast(u.active === false ? 'Usuario activado' : 'Usuario suspendido'); openAdmin(); } catch (e) { toast(Cloud.errText(e), 4000); } };
-        q('#udDel').onclick = async () => { if (await confirmBox('¿Eliminar a ' + u.name + '?', 'Se borra su usuario y su última ubicación. Esto no se puede deshacer.', 'Eliminar', true)) { try { await Cloud.deleteUser(u.id); S.team.list = S.team.list.filter(x => x.id !== u.id); map.invalidate(); toast('Usuario eliminado'); openAdmin(); } catch (e) { toast(Cloud.errText(e), 4000); } } };
       }
     }
   }
