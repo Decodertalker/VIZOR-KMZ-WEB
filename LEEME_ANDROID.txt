@@ -182,3 +182,6 @@ PASO OBLIGATORIO: ejecutar 7_admin_principal.sql en Supabase (después de 1_ a 6
 
 == v3.23 ==
 - Brave y Opera GX usan automaticamente "Google en modo compatible" (con Edge/Chrome el modo vectorial funciona bien). Se puede cambiar en Mapa y capas.
+
+== v3.24 ==
+- El Registro de diagnostico solo aparece para el usuario admin.
