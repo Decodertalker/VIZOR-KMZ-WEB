@@ -9,7 +9,9 @@
   const latOf = y => { const n = PI - 2 * PI * y; return 180 / PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))); };
 
   /* registro de diagnóstico (se puede copiar desde el menú) */
-  const LOG = [], dbg = (t, d) => { try { LOG.push((performance.now() / 1000).toFixed(2) + 's ' + t + (d === undefined ? '' : ' ' + (typeof d === 'string' ? d : JSON.stringify(d)))); if (LOG.length > 700) LOG.splice(0, 150); } catch (e) { } };
+  let PREV = ''; try { PREV = localStorage.getItem('vz_log') || ''; } catch (e) { }
+  let _sv = 0; const _save = () => { _sv = 0; try { localStorage.setItem('vz_log', LOG.slice(-260).join('\n')); } catch (e) { } };
+  const LOG = [], dbg = (t, d) => { try { if (!_sv) _sv = setTimeout(_save, 1500); LOG.push((performance.now() / 1000).toFixed(2) + 's ' + t + (d === undefined ? '' : ' ' + (typeof d === 'string' ? d : JSON.stringify(d)))); if (LOG.length > 700) LOG.splice(0, 150); } catch (e) { } };
   const f4 = v => (typeof v === 'number' && isFinite(v)) ? +v.toFixed(4) : v;
 
   class GeoMap {
@@ -105,7 +107,7 @@
         gm.addListener('maptypeid_changed', () => dbg('evt maptypeid_changed', gm.getMapTypeId()));
         gm.addListener('dragstart', () => this.onUserMove && this.onUserMove());
         gm.addListener('zoom_changed', () => {
-          dbg('evt zoom_changed', { gz: f4(gm.getZoom()), z: f4(this.z), hold: performance.now() < this._hold });
+          if ((this._zcN = (this._zcN || 0) + 1) % 12 === 1 || Math.abs(gm.getZoom() - this.z) > 0.02) dbg('evt zoom_changed#' + this._zcN, { gz: f4(gm.getZoom()), z: f4(this.z), hold: performance.now() < this._hold });
           if (performance.now() > this._hold) { if (this.onUserMove) this.onUserMove(); if (!this.gOwn) this._zoomHide(true); }   // Google anima su zoom por dentro: mientras dura, los datos no se dibujan para que no "naden" fuera de su sitio
         });
         gm.addListener('idle', () => { dbg('evt idle', { gz: f4(gm.getZoom()), z: f4(this.z), zh: !!this._zh }); if (this._zh) { this._hold = 0; this._poll(); this._zoomHide(false); } });
@@ -119,7 +121,9 @@
       try {
         if (this._ov || !this.gm || !(g.google && g.google.maps && g.google.maps.WebGLOverlayView)) return;
         const ov = new g.google.maps.WebGLOverlayView(); this._ov = ov; this._ovSeen = 0; dbg('glsync start');
+        ov.onAdd = () => dbg('glsync onAdd'); ov.onContextRestored = () => dbg('glsync onContextRestored'); ov.onContextLost = () => dbg('glsync onContextLost'); ov.onRemove = () => dbg('glsync onRemove');
         ov.onDraw = ({ transformer }) => {
+          this._odN = (this._odN || 0) + 1; if (this._odN === 1) dbg('glsync onDraw #1', { tr: !!transformer, own: this.gOwn });
           try {
             if (!this.gOwn || !transformer) return;
             const c = this.center(), d = 0.002, W = this.w, H = this.h;
@@ -134,7 +138,7 @@
             const o = [this.cx, this.cy, this.z, this.s];
             this.cx = cx; this.cy = cy; this.z = z; this.s = s; this._inGl = true;
             try { this._render(); } finally { this._inGl = false; this.cx = o[0]; this.cy = o[1]; this.z = o[2]; this.s = o[3]; }
-          } catch (e) { }
+          } catch (e) { if ((this._oeN = (this._oeN || 0) + 1) % 30 === 1) dbg('glsync onDraw ERROR', String(e && e.message || e)); }
         };
         ov.setMap(this.gm);
         setTimeout(() => { if (!this._ovSeen && this._ov) { try { this._ov.setMap(null); } catch (e) { } this._ov = null; this._ovFail = 1; dbg('glsync sin respuesta (se usa el método simple)'); this.invalidate(); } }, 4000);
@@ -160,11 +164,15 @@
     _zoomLimit() {
       const gm = this.gm; if (!gm) return;
       const now = performance.now();
-      if (now - (this._smpAt || 0) > 1500) {   // muestra periódica del estado
+      if (now - (this._smpAt || 0) > 1500) {   // muestra periódica del estado: siempre si algo no cuadra, si no cada 8 s
         this._smpAt = now;
         try {
           const c = gm.getCenter(), gz = gm.getZoom(), dv = gm.getDiv && gm.getDiv();
-          dbg('sample', { own: this.gOwn, gl: this._glActive(), ovSeen: !!this._ovSeen, ovFail: !!this._ovFail, z: f4(this.z), gz: f4(gz), maxZ: this.maxZ, dx: c ? f4((mxOf(c.lng()) - this.cx) * this.s) : null, dy: c ? f4((myOf(c.lat()) - this.cy) * this.s) : null, cv: [this.w, this.h, this.cv.style.opacity || '1'], gdiv: dv ? [dv.clientWidth, dv.clientHeight, dv.hidden] : null, zh: !!this._zh, anim: !!this.anim, type: gm.getMapTypeId && gm.getMapTypeId(), off: this._offN || 0 });
+          const bad = !!(c && (Math.abs((mxOf(c.lng()) - this.cx) * this.s) > 3 || Math.abs((myOf(c.lat()) - this.cy) * this.s) > 3 || Math.abs(gz - this.z) > 0.02));
+          if (bad || now - (this._smpL || 0) > 8000) {
+            this._smpL = now;
+            dbg('sample', { own: this.gOwn, gl: this._glActive(), ovSeen: !!this._ovSeen, ovFail: !!this._ovFail, z: f4(this.z), gz: f4(gz), maxZ: this.maxZ, dx: c ? f4((mxOf(c.lng()) - this.cx) * this.s) : null, dy: c ? f4((myOf(c.lat()) - this.cy) * this.s) : null, cv: [this.w, this.h, this.cv.style.opacity || '1'], gdiv: dv ? [dv.clientWidth, dv.clientHeight, dv.hidden] : null, zh: !!this._zh, anim: !!this.anim, type: gm.getMapTypeId && gm.getMapTypeId(), off: this._offN || 0 });
+          }
         } catch (e) { dbg('sample ERROR', String(e)); }
       }
       if (!this.gOwn && now - (this._attAt || now) > 5000 && now > this._hold + 350 && !this.anim) { const gz0 = gm.getZoom(); if (gz0 != null && gz0 < this.minZ) { this._offN = (this._offN || 0) + 1; if (this._offN > 120) { this._offN = 0; this.onGoogleLost && this.onGoogleLost(); } } else this._offN = 0; }
@@ -457,7 +465,7 @@
     }
   }
 
-  GeoMap.LOG = LOG; GeoMap.dbg = dbg;
+  GeoMap.LOG = LOG; GeoMap.dbg = dbg; GeoMap.prev = () => PREV;
   g.GeoMap = GeoMap;
   g.Merc = { mxOf, myOf, lonOf, latOf };
 })(window);

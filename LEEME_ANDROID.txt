@@ -173,3 +173,9 @@ PASO OBLIGATORIO: ejecutar 7_admin_principal.sql en Supabase (después de 1_ a 6
 
 == v3.20 ==
 - Menú > "Registro de diagnóstico": copia/descarga un informe (navegador, WebGL, Google, cámara, eventos y errores) para soporte.
+
+== v3.21 ==
+- Registro de diagnóstico: guarda tambien la sesion anterior (sobrevive a recargar), muestra el texto real de los errores de Google y el ciclo de vida de la sincronia exacta.
+
+== v3.22 ==
+- Mapa y capas > "Google en modo compatible": Google maneja el zoom (clásico) y los datos aparecen al terminar; alternativa si el modo vectorial se desfasa en algun navegador.

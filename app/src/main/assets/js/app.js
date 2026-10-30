@@ -43,7 +43,7 @@
   try { Object.assign(S, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'), { sel: null }); } catch (e) { }
   if (!S.gdef) { S.gdef = 1; if (window.CAJAS_GKEY || S.gkey) S.base = 'gmap'; }   // Google Maps como mapa por defecto (una sola vez; después se respeta lo que elijan)
   function saveSettings() {
-    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ layers: S.layers, base: S.base, theme: S.theme, themeMode: S.themeMode, radius: S.radius, gkey: S.gkey || '', nbMode: S.nbMode, autoOrd: S.autoOrd, gdef: S.gdef })); } catch (e) { }
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ layers: S.layers, base: S.base, theme: S.theme, themeMode: S.themeMode, radius: S.radius, gkey: S.gkey || '', nbMode: S.nbMode, autoOrd: S.autoOrd, gdef: S.gdef, gRaster: !!S.gRaster })); } catch (e) { }
   }
 
   const lightMap = () => S.base === 'light' || S.base === 'esri' || S.theme === 'light';
@@ -146,8 +146,12 @@
       window.__gmReady = () => res();
       window.gm_authFailure = () => { DBG('gm_authFailure'); toast('La clave de Google Maps no es válida o no tiene activada “Maps JavaScript API”', 5000); if (BASES[S.base] && BASES[S.base].google) { S.base = 'dark'; saveSettings(); } applyBase(); };
       const sc = document.createElement('script');
+      sc.crossOrigin = 'anonymous';   // así el navegador muestra el texto real de los errores de Google en el registro
       sc.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(key) + '&callback=__gmReady&v=weekly&language=es';
-      sc.onerror = () => { gLoading = null; rej(new Error('red')); };
+      sc.onerror = () => {
+        if (sc.crossOrigin) { DBG('Google con crossorigin falló: se reintenta sin él'); const s2 = document.createElement('script'); s2.src = sc.src; s2.onerror = () => { gLoading = null; rej(new Error('red')); }; sc.remove(); document.head.appendChild(s2); return; }
+        gLoading = null; rej(new Error('red'));
+      };
       setTimeout(() => { if (!(window.google && window.google.maps)) { gLoading = null; rej(new Error('tiempo')); } }, 8000);
       document.head.appendChild(sc);
     });
@@ -160,7 +164,8 @@
     DBG('useGoogle', type); try { await loadGoogle(gk); } catch (e) { DBG('loadGoogle FALLÓ', String(e && e.message)); toast('No se pudo cargar Google Maps', 3000); return false; }
     if (!gmap) {
       const c = map.center();
-      const gv = google.maps.RenderingType ? { renderingType: google.maps.RenderingType.VECTOR } : {};
+      const gv = google.maps.RenderingType ? { renderingType: S.gRaster ? google.maps.RenderingType.RASTER : google.maps.RenderingType.VECTOR } : {};
+      DBG('Map nuevo', { render: S.gRaster ? 'RASTER (compatible)' : 'VECTOR' });
       gmap = new google.maps.Map($('#gmap'), { mapId: window.CAJAS_GMAPID || 'DEMO_MAP_ID', ...gv, center: { lat: c.lat, lng: c.lon }, zoom: map.z, disableDefaultUI: true, gestureHandling: 'greedy', clickableIcons: false, keyboardShortcuts: false, mapTypeId: type });
       $('#gmap').hidden = false; map.attachGoogle(gmap);
     } else { $('#gmap').hidden = false; gmap.setMapTypeId(type); map.attachGoogle(gmap); }
@@ -262,8 +267,8 @@
       'google.maps: ' + (window.google && google.maps ? 'v' + google.maps.version + ' · WebGLOverlayView ' + !!google.maps.WebGLOverlayView + ' · MaxZoomService ' + !!google.maps.MaxZoomService : 'NO cargado'),
       'mapId: ' + (window.CAJAS_GMAPID || 'DEMO_MAP_ID') + ' · clave: ' + (window.CAJAS_GKEY || S.gkey ? 'sí (' + String(window.CAJAS_GKEY || S.gkey).slice(0, 6) + '…)' : 'no'),
       'gmap div: ' + (gd ? gd.clientWidth + 'x' + gd.clientHeight + ' hidden=' + gd.hidden : '-') + ' · lienzo: ' + map.w + 'x' + map.h + ' · centro ' + JSON.stringify(map.center()) + ' · z ' + map.z + ' · maxZ ' + map.maxZ,
-      'datos: cajas ' + S.pts.length + ' · áreas ' + S.areas.length + ' · rutas ' + S.lines.length + ' · capas ' + JSON.stringify(S.layers), '--- eventos ---'];
-    return H.concat(GeoMap.LOG).join('\n');
+      'datos: cajas ' + S.pts.length + ' · áreas ' + S.areas.length + ' · rutas ' + S.lines.length + ' · capas ' + JSON.stringify(S.layers), '--- eventos (esta sesión) ---'];
+    const pv = GeoMap.prev(); return H.concat(GeoMap.LOG, pv ? ['', '--- eventos de la sesión ANTERIOR (antes de recargar) ---', pv] : []).join('\n');
   }
   function openDiag() {
     DBG('diagnóstico abierto');
@@ -1063,6 +1068,7 @@
       const sub = k => k === 'auto' ? '<small>Claro de día y oscuro de noche, según el sol</small>' : k === 'none' ? '<small>No descarga nada · ideal sin señal</small>' : k === 'gsat' ? '<small>Solo imagen, sin etiquetas de Google' + (map.googleMode() ? ' · modo ' + map.googleMode() : '') + '</small>' : k === 'ghyb' ? '<small>Con nombres de calles de Google (el zoom puede parpadear)</small>' : '';
       const on = k => k === 'auto' ? (S.themeMode === 'auto' && (S.base === 'dark' || S.base === 'light')) : (k === 'dark' || k === 'light') ? (S.themeMode !== 'auto' && S.base === k) : S.base === k;
       m.querySelector('#lyB').innerHTML = keys.map(k => '<button class="opt' + (on(k) ? ' on' : '') + '" data-b="' + k + '"><span class="rad"></span><div><b>' + lab(k) + '</b>' + sub(k) + '</div></button>').join('');
+      if (BASES[S.base] && BASES[S.base].google) m.querySelector('#lyB').insertAdjacentHTML('beforeend', '<button class="opt' + (S.gRaster ? ' on' : '') + '" data-gr="1"><div><b>Google en modo compatible</b><small>Úsalo si los datos se desfasan al hacer zoom: Google maneja el zoom y los datos se muestran al terminar</small></div><span class="sw"></span></button>');
       const L = [['cajas', 'Cajas y nodos'], ['areas', 'Áreas de cobertura'], ['rutas', 'Rutas de fibra'], ['etiquetas', 'Nombres de las cajas']];
       let h = L.map(l => '<button class="opt' + (S.layers[l[0]] ? ' on' : '') + '" data-l="' + l[0] + '"><b>' + l[1] + '</b><span class="sw"></span></button>').join('');
       if (!evAdmin()) h += '<button class="opt' + (S.layers.evals !== false ? ' on' : '') + '" data-l="evals"><b>Mis evaluaciones y ruta</b><span class="sw"></span></button>';
@@ -1079,6 +1085,7 @@
     if (evAdmin()) Cloud.listUsers().then(us => { techList = us.filter(u => u.role === 'tecnico' && u.active !== false); render(); }).catch(() => { });
     render();
     m.onclick = e => {
+      if (e.target.closest('[data-gr]')) { S.gRaster = !S.gRaster; saveSettings(); try { map.detachGoogle(); $('#gmap').innerHTML = ''; gmap = null; } catch (x) { } applyBase(); render(); toast(S.gRaster ? 'Google en modo compatible' : 'Google en modo normal', 2500); return; }
       const b = e.target.closest('[data-b]'), l = e.target.closest('[data-l]'), ev = e.target.closest('[data-ev]'), ea = e.target.closest('[data-evall]');
       if (ev) { const k = ev.dataset.ev; S.evShow.has(k) ? S.evShow.delete(k) : S.evShow.add(k); map.invalidate(); render(); }
       if (ea) { if (S.evShow.size) S.evShow.clear(); else { techList.forEach(u => S.evShow.add(u.id)); } map.invalidate(); render(); }
@@ -1120,7 +1127,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.20 · ' + esc((BASES[S.base] || {}).label || 'mapa') + '</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.22 · ' + esc((BASES[S.base] || {}).label || 'mapa') + '</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {
@@ -1148,7 +1155,7 @@
   }
 
   /* ---------- administrador principal · actualizaciones · KMZ subidos ---------- */
-  const APP_VER = '3.20';
+  const APP_VER = '3.22';
   // Enlaces de Google Drive -> descarga directa
   const driveDirect = u => { u = String(u || '').trim(); const m = u.match(/^https:\/\/(?:drive|docs)\.google\.com\/(?:file\/d\/|open\?(?:[^#]*&)?id=|uc\?(?:[^#]*&)?id=)([A-Za-z0-9_-]{10,})/); return m ? 'https://drive.usercontent.google.com/download?id=' + m[1] + '&export=download&confirm=t' : u; };
   window.__loginInfo = () => {
