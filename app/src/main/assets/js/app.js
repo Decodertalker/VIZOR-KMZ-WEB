@@ -41,6 +41,7 @@
     showLine: true, pin: null, evals: [], team: { on: false, list: [], t: 0 }, groups: new Map(), munis: new Map(), seedName: 'GLOBAL ZONA NORTE 1'
   };
   try { Object.assign(S, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'), { sel: null }); } catch (e) { }
+  if (S.gRaster === undefined) S.gRaster = !!(navigator.brave || /OPR\//.test(navigator.userAgent));   // Brave y Opera GX bloquean/alteran WebGL: Google va en modo compatible (se puede cambiar en Mapa y capas)
   if (!S.gdef) { S.gdef = 1; if (window.CAJAS_GKEY || S.gkey) S.base = 'gmap'; }   // Google Maps como mapa por defecto (una sola vez; después se respeta lo que elijan)
   function saveSettings() {
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ layers: S.layers, base: S.base, theme: S.theme, themeMode: S.themeMode, radius: S.radius, gkey: S.gkey || '', nbMode: S.nbMode, autoOrd: S.autoOrd, gdef: S.gdef, gRaster: !!S.gRaster })); } catch (e) { }
@@ -1127,7 +1128,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.22 · ' + esc((BASES[S.base] || {}).label || 'mapa') + '</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.23 · ' + esc((BASES[S.base] || {}).label || 'mapa') + '</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {
@@ -1155,7 +1156,7 @@
   }
 
   /* ---------- administrador principal · actualizaciones · KMZ subidos ---------- */
-  const APP_VER = '3.22';
+  const APP_VER = '3.23';
   // Enlaces de Google Drive -> descarga directa
   const driveDirect = u => { u = String(u || '').trim(); const m = u.match(/^https:\/\/(?:drive|docs)\.google\.com\/(?:file\/d\/|open\?(?:[^#]*&)?id=|uc\?(?:[^#]*&)?id=)([A-Za-z0-9_-]{10,})/); return m ? 'https://drive.usercontent.google.com/download?id=' + m[1] + '&export=download&confirm=t' : u; };
   window.__loginInfo = () => {

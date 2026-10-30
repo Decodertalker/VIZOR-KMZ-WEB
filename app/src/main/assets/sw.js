@@ -1,5 +1,5 @@
 /* Service worker: la app y los datos funcionan sin internet; los mosaicos del mapa se guardan al verlos */
-const VERSION = 'v41';
+const VERSION = 'v42';
 const SHELL = 'shell-' + VERSION;
 const TILES = 'tiles-v1';
 const ASSETS = [

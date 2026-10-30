@@ -179,3 +179,6 @@ PASO OBLIGATORIO: ejecutar 7_admin_principal.sql en Supabase (después de 1_ a 6
 
 == v3.22 ==
 - Mapa y capas > "Google en modo compatible": Google maneja el zoom (clásico) y los datos aparecen al terminar; alternativa si el modo vectorial se desfasa en algun navegador.
+
+== v3.23 ==
+- Brave y Opera GX usan automaticamente "Google en modo compatible" (con Edge/Chrome el modo vectorial funciona bien). Se puede cambiar en Mapa y capas.
