@@ -8,6 +8,10 @@
   const lonOf = x => x * 360 - 180;
   const latOf = y => { const n = PI - 2 * PI * y; return 180 / PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))); };
 
+  /* registro de diagnóstico (se puede copiar desde el menú) */
+  const LOG = [], dbg = (t, d) => { try { LOG.push((performance.now() / 1000).toFixed(2) + 's ' + t + (d === undefined ? '' : ' ' + (typeof d === 'string' ? d : JSON.stringify(d)))); if (LOG.length > 700) LOG.splice(0, 150); } catch (e) { } };
+  const f4 = v => (typeof v === 'number' && isFinite(v)) ? +v.toFixed(4) : v;
+
   class GeoMap {
     constructor(canvas) {
       this.cv = canvas; this.ctx = canvas.getContext('2d');
@@ -81,6 +85,7 @@
     attachGoogle(gm) {
       if (this.gm === gm) return;
       this.gOwn = false; this.cv.style.pointerEvents = 'none';   // por defecto Google recibe los gestos; este lienzo solo dibuja encima
+      dbg('attachGoogle', { z: f4(this.z), w: this.w, h: this.h, dpr: this.dpr, mapType: gm.getMapTypeId && gm.getMapTypeId(), render: this._gType ? this._gType() : '?', ver: g.google && g.google.maps && g.google.maps.version });
       this.gm = gm; this._attAt = performance.now(); this.rot = 0; this.rotT = null; this.onRot && this.onRot(0); this.src = null; this.tiles.clear(); this.queue = [];
       if (!this._gl) {
         this._gl = 1;
@@ -88,18 +93,22 @@
         this._gType = () => { try { return gm.getRenderingType ? gm.getRenderingType() : 'RASTER'; } catch (e) { return 'RASTER'; } };
         this._gMode = () => {
           const own = this._gType() === 'VECTOR';
-          if (own === this.gOwn) return; this.gOwn = own;
+          if (own === this.gOwn) return; this.gOwn = own; dbg('renderingType', { own, type: this._gType() });
           try { gm.setOptions({ gestureHandling: own ? 'none' : 'greedy' }); } catch (e) { }
           this.cv.style.pointerEvents = own ? '' : 'none';
           if (own) { this._push(true); this._glSyncStart(); }
           this.onGoogleMode && this.onGoogleMode(own); this.invalidate();
         };
-        gm.addListener('renderingtype_changed', () => this._gMode());
+        gm.addListener('renderingtype_changed', () => { dbg('evt renderingtype_changed', this._gType()); this._gMode(); });
+        gm.addListener('tilt_changed', () => dbg('evt tilt_changed', gm.getTilt && gm.getTilt()));
+        gm.addListener('heading_changed', () => dbg('evt heading_changed', gm.getHeading && gm.getHeading()));
+        gm.addListener('maptypeid_changed', () => dbg('evt maptypeid_changed', gm.getMapTypeId()));
         gm.addListener('dragstart', () => this.onUserMove && this.onUserMove());
         gm.addListener('zoom_changed', () => {
+          dbg('evt zoom_changed', { gz: f4(gm.getZoom()), z: f4(this.z), hold: performance.now() < this._hold });
           if (performance.now() > this._hold) { if (this.onUserMove) this.onUserMove(); if (!this.gOwn) this._zoomHide(true); }   // Google anima su zoom por dentro: mientras dura, los datos no se dibujan para que no "naden" fuera de su sitio
         });
-        gm.addListener('idle', () => { if (this._zh) { this._hold = 0; this._poll(); this._zoomHide(false); } });
+        gm.addListener('idle', () => { dbg('evt idle', { gz: f4(gm.getZoom()), z: f4(this.z), zh: !!this._zh }); if (this._zh) { this._hold = 0; this._poll(); this._zoomHide(false); } });
         gm.addListener('click', e => { if (this.gOwn || !e.latLng || !this.onTap) return; const p = this.toScreen(e.latLng.lat(), e.latLng.lng()); this.onTap(p[0], p[1]); });
         if (!this._loopOn) { this._loopOn = 1; const loop = () => { this._poll(); requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
       }
@@ -109,7 +118,7 @@
     _glSyncStart() {
       try {
         if (this._ov || !this.gm || !(g.google && g.google.maps && g.google.maps.WebGLOverlayView)) return;
-        const ov = new g.google.maps.WebGLOverlayView(); this._ov = ov; this._ovSeen = 0;
+        const ov = new g.google.maps.WebGLOverlayView(); this._ov = ov; this._ovSeen = 0; dbg('glsync start');
         ov.onDraw = ({ transformer }) => {
           try {
             if (!this.gOwn || !transformer) return;
@@ -119,7 +128,8 @@
             const s = (b[0] - a[0]) / (mxOf(c.lon + d) - mxOf(c.lon));
             if (!(s > 0) || !isFinite(a[0] + a[1] + s)) return;
             const z = Math.log2(s / TS), cx = mxOf(c.lon) - (a[0] - W / 2) / s, cy = myOf(c.lat) - (a[1] - H / 2) / s;
-            if (Math.abs(z - this.z) > 0.6 || Math.abs(cx - this.cx) * s > 400 || Math.abs(cy - this.cy) * s > 400) return;   // lectura rara: no me fío
+            if (Math.abs(z - this.z) > 0.6 || Math.abs(cx - this.cx) * s > 400 || Math.abs(cy - this.cy) * s > 400) { if ((this._rjN = (this._rjN || 0) + 1) % 30 === 1) dbg('glsync rechazado', { zg: f4(z), z: f4(this.z), dx: f4((cx - this.cx) * s), dy: f4((cy - this.cy) * s) }); return; }
+            if (!this._ovSeen) dbg('glsync primer dibujo OK', { zg: f4(z), z: f4(this.z) });   // lectura rara: no me fío
             this._ovSeen = performance.now();
             const o = [this.cx, this.cy, this.z, this.s];
             this.cx = cx; this.cy = cy; this.z = z; this.s = s; this._inGl = true;
@@ -127,13 +137,13 @@
           } catch (e) { }
         };
         ov.setMap(this.gm);
-        setTimeout(() => { if (!this._ovSeen && this._ov) { try { this._ov.setMap(null); } catch (e) { } this._ov = null; this._ovFail = 1; this.invalidate(); } }, 4000);
+        setTimeout(() => { if (!this._ovSeen && this._ov) { try { this._ov.setMap(null); } catch (e) { } this._ov = null; this._ovFail = 1; dbg('glsync sin respuesta (se usa el método simple)'); this.invalidate(); } }, 4000);
       } catch (e) { this._ov = null; }
     }
     _glActive() { return !!(this._ov && this._ovSeen && this.gOwn && !this._ovFail); }
     _zoomHide(on) {
       if (on === !!this._zh) { if (on) { clearTimeout(this._zhT); this._zhT = setTimeout(() => this._zoomHide(false), 1500); } return; }
-      this._zh = on; clearTimeout(this._zhT);
+      this._zh = on; clearTimeout(this._zhT); dbg('zoomHide', on);
       this.cv.style.transition = on ? 'none' : 'opacity .18s'; this.cv.style.opacity = on ? '0' : '1';
       if (on) this._zhT = setTimeout(() => { this._hold = 0; this._poll(); this._zoomHide(false); }, 1500); else this.invalidate();
     }
@@ -143,21 +153,29 @@
     _push(force) {
       if (!this.gm) return;
       this._hold = performance.now() + 300;
-      try { this.gm.moveCamera({ center: { lat: latOf(this.cy), lng: lonOf(this.cx) }, zoom: Math.min(this.z, 21) }); } catch (e) { }
+      this._pn = (this._pn || 0) + 1;
+      try { this.gm.moveCamera({ center: { lat: latOf(this.cy), lng: lonOf(this.cx) }, zoom: Math.min(this.z, 21) }); if (this._pn % 40 === 1) dbg('push#' + this._pn, { z: f4(this.z), lat: f4(latOf(this.cy)), lon: f4(lonOf(this.cx)) }); } catch (e) { dbg('push ERROR', String(e && e.message || e)); }
     }
     /* Google limita el zoom máximo (en satélite depende de la zona). Si mi mapa sigue acercando más que Google, los datos se "escapan" de la imagen: igualo mi límite al suyo. */
     _zoomLimit() {
       const gm = this.gm; if (!gm) return;
       const now = performance.now();
+      if (now - (this._smpAt || 0) > 1500) {   // muestra periódica del estado
+        this._smpAt = now;
+        try {
+          const c = gm.getCenter(), gz = gm.getZoom(), dv = gm.getDiv && gm.getDiv();
+          dbg('sample', { own: this.gOwn, gl: this._glActive(), ovSeen: !!this._ovSeen, ovFail: !!this._ovFail, z: f4(this.z), gz: f4(gz), maxZ: this.maxZ, dx: c ? f4((mxOf(c.lng()) - this.cx) * this.s) : null, dy: c ? f4((myOf(c.lat()) - this.cy) * this.s) : null, cv: [this.w, this.h, this.cv.style.opacity || '1'], gdiv: dv ? [dv.clientWidth, dv.clientHeight, dv.hidden] : null, zh: !!this._zh, anim: !!this.anim, type: gm.getMapTypeId && gm.getMapTypeId(), off: this._offN || 0 });
+        } catch (e) { dbg('sample ERROR', String(e)); }
+      }
       if (!this.gOwn && now - (this._attAt || now) > 5000 && now > this._hold + 350 && !this.anim) { const gz0 = gm.getZoom(); if (gz0 != null && gz0 < this.minZ) { this._offN = (this._offN || 0) + 1; if (this._offN > 120) { this._offN = 0; this.onGoogleLost && this.onGoogleLost(); } } else this._offN = 0; }
       if (this.gOwn && now > this._hold + 350 && !this.anim && !this.zt) {   // ya se asentó: lo que Google reporta es lo que realmente muestra
         const gz = gm.getZoom();
         const gc = gm.getCenter();
         const off = gz == null || !gc || Math.abs(gz - this.z) > 1.2 || Math.abs(mxOf(gc.lng()) - this.cx) * this.s > 600 || Math.abs(myOf(gc.lat()) - this.cy) * this.s > 600;
         if (off && !(gz >= 10 && this.z - gz > 0.02)) {   // Google quedó en otra vista (p. ej. el mundo entero): se la vuelvo a indicar; si insiste, se deja Google
-          if (now - (this._offAt || 0) > 500) { this._offAt = now; this._offN = (this._offN || 0) + 1; if (this._offN > 3) { this._offN = 0; this.onGoogleLost && this.onGoogleLost(); } else this._push(); }
+          if (now - (this._offAt || 0) > 500) { this._offAt = now; this._offN = (this._offN || 0) + 1; dbg('Google desincronizado', { n: this._offN, gz: f4(gz), z: f4(this.z) }); if (this._offN > 3) { this._offN = 0; this.onGoogleLost && this.onGoogleLost(); } else this._push(); }
         } else this._offN = 0;
-        if (gz != null && gz >= 10 && this.z - gz > 0.02) { this.maxZ = Math.max(this.minZ, gz); this.z = this.maxZ; this._setS(); this._push(); this.invalidate(); }
+        if (gz != null && gz >= 10 && this.z - gz > 0.02) { dbg('zoomLimit readback', { gz: f4(gz), z: f4(this.z) }); this.maxZ = Math.max(this.minZ, gz); this.z = this.maxZ; this._setS(); this._push(); this.invalidate(); }
       }
       if (now - (this._mzAt || 0) > 1500 && g.google && g.google.maps && g.google.maps.MaxZoomService) {
         this._mzAt = now;
@@ -166,7 +184,7 @@
           if (t !== 'satellite' && t !== 'hybrid') { this.maxZ = 21; return; }
           const c = gm.getCenter(); if (!c) return;
           (this._mzs = this._mzs || new g.google.maps.MaxZoomService()).getMaxZoomAtLatLng(c, r => {
-            if (r && r.status === 'OK' && r.zoom >= 10 && r.zoom < 21 && this.gm === gm) { this.maxZ = r.zoom; if (this.z > r.zoom) { this.z = r.zoom; this._setS(); this._push(); this.invalidate(); } }
+            if (r && r.status === 'OK' && r.zoom >= 10 && r.zoom < 21 && this.gm === gm) { dbg('MaxZoomService', r.zoom); this.maxZ = r.zoom; if (this.z > r.zoom) { this.z = r.zoom; this._setS(); this._push(); this.invalidate(); } }
           });
         } catch (e) { }
       }
@@ -439,6 +457,7 @@
     }
   }
 
+  GeoMap.LOG = LOG; GeoMap.dbg = dbg;
   g.GeoMap = GeoMap;
   g.Merc = { mxOf, myOf, lonOf, latOf };
 })(window);

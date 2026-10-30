@@ -170,3 +170,6 @@ PASO OBLIGATORIO: ejecutar 7_admin_principal.sql en Supabase (después de 1_ a 6
 
 == v3.19 ==
 - Si Google queda en otra vista que la app (p. ej. el mundo entero), se detecta en ~2 s y se recrea el mapa de Google con la vista correcta; si vuelve a fallar, se usa el satélite propio.
+
+== v3.20 ==
+- Menú > "Registro de diagnóstico": copia/descarga un informe (navegador, WebGL, Google, cámara, eventos y errores) para soporte.
