@@ -96,13 +96,23 @@
         };
         gm.addListener('renderingtype_changed', () => this._gMode());
         gm.addListener('dragstart', () => this.onUserMove && this.onUserMove());
-        gm.addListener('zoom_changed', () => { if (performance.now() > this._hold && this.onUserMove) this.onUserMove(); });
+        gm.addListener('zoom_changed', () => {
+          if (performance.now() > this._hold) { if (this.onUserMove) this.onUserMove(); if (!this.gOwn) this._zoomHide(true); }   // Google anima su zoom por dentro: mientras dura, los datos no se dibujan para que no "naden" fuera de su sitio
+        });
+        gm.addListener('idle', () => { if (this._zh) { this._hold = 0; this._poll(); this._zoomHide(false); } });
         gm.addListener('click', e => { if (this.gOwn || !e.latLng || !this.onTap) return; const p = this.toScreen(e.latLng.lat(), e.latLng.lng()); this.onTap(p[0], p[1]); });
         const loop = () => { this._poll(); requestAnimationFrame(loop); };
         requestAnimationFrame(loop);
       }
-      this._push(true); this.invalidate(); setTimeout(() => this._gMode && this._gMode(), 400); setTimeout(() => this._gMode && this._gMode(), 1500);
+      this._push(true); this.invalidate(); setTimeout(() => this._gMode && this._gMode(), 400); setTimeout(() => this._gMode && this._gMode(), 1500); setTimeout(() => this._gMode && this._gMode(), 4000); setTimeout(() => this._gMode && this._gMode(), 9000);
     }
+    _zoomHide(on) {
+      if (on === !!this._zh) { if (on) { clearTimeout(this._zhT); this._zhT = setTimeout(() => this._zoomHide(false), 1500); } return; }
+      this._zh = on; clearTimeout(this._zhT);
+      this.cv.style.transition = on ? 'none' : 'opacity .18s'; this.cv.style.opacity = on ? '0' : '1';
+      if (on) this._zhT = setTimeout(() => { this._hold = 0; this._poll(); this._zoomHide(false); }, 1500); else this.invalidate();
+    }
+    googleMode() { return !this.gm ? '' : this.gOwn ? 'vectorial' : 'clásico'; }
     setVector(v) { this.vec = v || null; this.invalidate(); }
     detachGoogle() { this.gm = null; this.gOwn = false; this.cv.style.pointerEvents = ''; this.invalidate(); }
     _push(force) {

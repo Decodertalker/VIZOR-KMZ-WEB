@@ -144,3 +144,16 @@ PASO OBLIGATORIO: ejecutar 7_admin_principal.sql en Supabase (después de 1_ a 6
 - Aplicación Android: Menú > "Buscar actualización" (para todos los usuarios). Además la app avisa sola: una notificación "Nueva versión X disponible" (el servicio de fondo revisa cada ~40 s) y, al abrir la app, una ventana con el botón "Descargar e instalar" (abre el enlace del APK; al terminar se toca el archivo y se instala encima, sin perder datos). Si la marcas obligatoria, no se puede cerrar la ventana.
 - Cómo publicar una versión: 1) compilar el APK en GitHub (Actions) 2) subirlo a una Release de GitHub (o Drive) y copiar el enlace directo https 3) Menú > Publicar actualización.
 - Los administradores también reciben ahora el servicio de avisos (para las actualizaciones).
+
+== v3.13 · Perfiles, permisos y origen de sesión ==
+- Ejecutar 8_perfiles.sql en Supabase (después de 7_).
+- Administrador principal (usuario "admin"): edita nombre, código y rol de cualquiera; crea admins y técnicos; ve IP, app/web, dispositivo y ubicación de cada inicio de sesión; es el único que exporta KMZ.
+- Otros administradores: solo crean técnicos; no editan, restablecen ni suspenden admins; sin "Exportar KMZ".
+- Administración: buscador, filtros (en línea, técnicos, admins, suspendidos), orden por actividad.
+- Actualizaciones: se puede pegar el enlace de Google Drive (compartido como "Cualquier persona con el enlace"); la app lo convierte a descarga directa.
+
+== v3.14 ==
+- Google Satélite ahora es imagen pura (sin etiquetas de Google): el zoom ya no muestra etiquetas dobles ni desfasadas. Se agregó "Google Maps · Satélite con calles" con el comportamiento anterior.
+
+== v3.15 ==
+- Zoom en Google (modo clásico): los datos se ocultan mientras Google anima el zoom y reaparecen alineados; "Mapa y capas" muestra el modo de Google (vectorial/clásico).

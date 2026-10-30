@@ -88,7 +88,8 @@
     sat: { label: 'Satélite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maxZoom: 19, ph: true, attr: 'Esri, Maxar, Earthstar Geographics', bg: '#101820', grid: 'rgba(255,255,255,.05)' },
     sath: { label: 'Satélite con nombres', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', overlay: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', ovMax: 18, maxZoom: 19, ph: true, attr: 'Esri, Maxar, Earthstar Geographics', bg: '#101820', grid: 'rgba(255,255,255,.05)' },
     gmap: { label: 'Google Maps · Mapa', google: true, gtype: 'roadmap', attr: '' },
-    gsat: { label: 'Google Maps · Satélite', google: true, gtype: 'hybrid', attr: '' },
+    gsat: { label: 'Google Maps · Satélite', google: true, gtype: 'satellite', attr: '' },
+    ghyb: { label: 'Google Maps · Satélite con calles', google: true, gtype: 'hybrid', attr: '' },
     vec: { label: 'Calles sin conexión', vector: true, attr: '© OpenStreetMap · Protomaps' },
     none: { label: 'Sin mapa (solo datos)', url: null, attr: 'Modo sin mapa base', bg: null, grid: null }
   };
@@ -1023,9 +1024,9 @@
   $('#btnLayers').onclick = () => {
     const m = modal('<h3>Mapa y capas</h3><p class="lead">Elige el fondo y qué mostrar sobre el mapa.</p><div id="lyB"></div><div class="sep"></div><div id="lyL"></div><div class="legend"><span><i class="dot"></i>Caja</span><span><i class="dot nodo"></i>Nodo / cabina</span><span><i class="dot nueva"></i>Nueva</span></div>');
     const render = () => {
-      const keys = ['auto', 'dark', 'light', 'esri', 'sat', 'sath', 'gmap', 'gsat', 'none'];
+      const keys = ['auto', 'dark', 'light', 'esri', 'sat', 'sath', 'gmap', 'gsat', 'ghyb', 'none'];
       const lab = k => k === 'auto' ? 'Automático · día y noche' : BASES[k].label;
-      const sub = k => k === 'auto' ? '<small>Claro de día y oscuro de noche, según el sol</small>' : k === 'none' ? '<small>No descarga nada · ideal sin señal</small>' : '';
+      const sub = k => k === 'auto' ? '<small>Claro de día y oscuro de noche, según el sol</small>' : k === 'none' ? '<small>No descarga nada · ideal sin señal</small>' : k === 'gsat' ? '<small>Solo imagen, sin etiquetas de Google' + (map.googleMode() ? ' · modo ' + map.googleMode() : '') + '</small>' : k === 'ghyb' ? '<small>Con nombres de calles de Google (el zoom puede parpadear)</small>' : '';
       const on = k => k === 'auto' ? (S.themeMode === 'auto' && (S.base === 'dark' || S.base === 'light')) : (k === 'dark' || k === 'light') ? (S.themeMode !== 'auto' && S.base === k) : S.base === k;
       m.querySelector('#lyB').innerHTML = keys.map(k => '<button class="opt' + (on(k) ? ' on' : '') + '" data-b="' + k + '"><span class="rad"></span><div><b>' + lab(k) + '</b>' + sub(k) + '</div></button>').join('');
       const L = [['cajas', 'Cajas y nodos'], ['areas', 'Áreas de cobertura'], ['rutas', 'Rutas de fibra'], ['etiquetas', 'Nombres de las cajas']];
@@ -1075,7 +1076,8 @@
       ...(cu ? [['reset', 'Sincronización automática', SY.err ? 'Error: ' + SY.err + ' · toca para reintentar' : (SY.t ? 'Al día · última vez ' + ago(SY.t) : 'Web y app comparten los mismos datos'), 'sync']] : []),
       ...(cu ? [['user', 'Mi cuenta', cu.name + ' · ' + (cu.role === 'admin' ? 'Administrador' : 'Técnico'), 'acct']] : (Cloud.configured() ? [] : [['user', 'Conectar servidor', 'Activa usuarios, administrador y ubicación del equipo', 'srv']])),
       ['clip', isT ? 'Mis evaluaciones y ruta' : 'Evaluaciones técnicas', nEv ? nEv + ' órdenes · ' + pEv + ' pendientes' : (isT ? 'Aquí aparecen las que te asignen' : 'Carga un Excel con clientes y órdenes'), 'evals'],
-      ...(isT ? [] : [['upload', 'Importar KMZ / KML', 'Suma o actualiza cajas desde otro archivo', 'imp'], ['download', 'Exportar KMZ', 'Todo con tus cambios, listo para Google Earth', 'exp']]),
+      ...(isT ? [] : [['upload', 'Importar KMZ / KML', 'Suma o actualiza cajas desde otro archivo', 'imp']]),
+      ...(isSuper() ? [['download', 'Exportar KMZ', 'Todo con tus cambios, listo para Google Earth', 'exp']] : []),
       ...(isT && NB && NB.testNotify ? [['chat', 'Probar notificaciones', 'Revisa permisos, batería y servidor y envía un aviso de prueba', 'nbtest']] : []),
       ['cloud', 'Guardar mosaicos de esta zona', 'Opcional: fondo en línea guardado para usar sin internet', 'off'],
       ['moon', 'Tema: ' + THEME_LABEL[S.themeMode], 'Toca para cambiar: automático, claro u oscuro', 'theme']
@@ -1083,7 +1085,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.12 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.15 · mapa OpenStreetMap</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {
@@ -1110,13 +1112,22 @@
   }
 
   /* ---------- administrador principal · actualizaciones · KMZ subidos ---------- */
-  const APP_VER = '3.12';
+  const APP_VER = '3.15';
+  // Enlaces de Google Drive -> descarga directa
+  const driveDirect = u => { u = String(u || '').trim(); const m = u.match(/^https:\/\/(?:drive|docs)\.google\.com\/(?:file\/d\/|open\?(?:[^#]*&)?id=|uc\?(?:[^#]*&)?id=)([A-Za-z0-9_-]{10,})/); return m ? 'https://drive.usercontent.google.com/download?id=' + m[1] + '&export=download&confirm=t' : u; };
+  window.__loginInfo = () => {
+    const ua = navigator.userAgent || '', mm = ua.match(/Android[^;)]*;\s*([^;)]+?)(?:\sBuild|[;)])/);
+    const o = { kind: NB ? 'app' : 'web', device: (mm ? mm[1] : (/iPhone|iPad/.test(ua) ? 'iPhone/iPad' : /Windows/.test(ua) ? 'Windows' : /Mac OS/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : 'Otro')) + ' · ' + (/Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Navegador') };
+    if (S.pos && Date.now() - (S.pos.t || Date.now()) < 120000) { o.lat = S.pos.lat; o.lon = S.pos.lon; o.acc = S.pos.acc; }
+    return o;
+  };
   const isSuper = () => { const u = Cloud.user(); return !!(u && u.role === 'admin' && (u.super || String(u.username || '').toLowerCase() === 'admin')); };
   const instCode = () => { try { return NB && NB.versionCode ? +NB.versionCode() : 0; } catch (e) { return 0; } };
   const instName = () => { try { return NB && NB.versionName ? String(NB.versionName()) : APP_VER; } catch (e) { return APP_VER; } };
   const fdate = t => { try { return new Date(t).toLocaleString('es', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
   let relSeen = 0;
   function updateModal(r, manual) {
+    r = Object.assign({}, r, { url: driveDirect(r.url) });
     const m = modal('<h3>Nueva versión ' + esc(r.version) + '</h3><p class="lead">Tienes la ' + esc(instName()) + (r.mandatory ? ' · <b>actualización obligatoria</b>' : '') + '.</p>' +
       (r.notes ? '<p class="lead" style="white-space:pre-line;text-align:left">' + esc(r.notes) + '</p>' : '') +
       '<p class="lead">Se descargará el instalador. Al terminar, ábrelo y elige “Instalar”: se actualiza sobre la que ya tienes y no pierdes tus datos.</p>' +
@@ -1140,9 +1151,9 @@
     if (!isSuper()) return;
     busy('Consultando…'); let cur = null; try { cur = await Cloud.releaseGet(); } catch (e) { idle(); toast(Cloud.errText(e), 3500); return; } idle();
     const m = modal('<h3>Publicar actualización</h3><p class="lead">' + (cur ? 'Publicada ahora: <b>' + esc(cur.version) + '</b> (código ' + cur.code + ') · ' + fdate(cur.published_at) : 'Todavía no hay ninguna publicada.') + '<br>Al publicar, todas las aplicaciones reciben el aviso en menos de un minuto y se les ofrece descargarla.</p>' +
-      '<label class="field"><span>NOMBRE DE LA VERSIÓN</span><input id="rlV" placeholder="Ej. 3.12" autocomplete="off"></label>' +
+      '<label class="field"><span>NOMBRE DE LA VERSIÓN</span><input id="rlV" placeholder="Ej. 3.13" autocomplete="off"></label>' +
       '<label class="field"><span>NÚMERO DE VERSIÓN (versionCode, debe ser mayor al anterior)</span><input id="rlC" inputmode="numeric" value="' + (cur ? cur.code + 1 : (instCode() || 0) + 1) + '" autocomplete="off"></label>' +
-      '<label class="field"><span>ENLACE DE DESCARGA DEL APK (https://…)</span><input id="rlU" value="' + esc(cur ? cur.url : '') + '" placeholder="https://github.com/…/releases/download/…/app.apk" autocapitalize="none" spellcheck="false"></label>' +
+      '<label class="field"><span>ENLACE DE DESCARGA DEL APK (https://…)</span><input id="rlU" value="' + esc(cur ? cur.url : '') + '" placeholder="Enlace de Google Drive (compartido: cualquiera con el enlace) o https://…/app.apk" autocapitalize="none" spellcheck="false"></label>' +
       '<label class="field"><span>NOTAS (OPCIONAL)</span><textarea id="rlN" placeholder="Qué cambió en esta versión"></textarea></label>' +
       '<button class="opt" id="rlM"><b>Actualización obligatoria</b><span class="sw"></span></button>' +
       '<div class="btnrow" style="margin-top:10px"><button class="btn" id="rlX">Cancelar</button><button class="btn accent" id="rlS">' + ic('upload') + 'Publicar</button></div>');
@@ -1150,7 +1161,7 @@
     q('#rlM').onclick = () => { mand = !mand; q('#rlM').classList.toggle('on', mand); };
     q('#rlX').onclick = closeModal;
     q('#rlS').onclick = async () => {
-      const v = q('#rlV').value.trim(), c = parseInt(q('#rlC').value, 10), u = q('#rlU').value.trim();
+      const v = q('#rlV').value.trim(), c = parseInt(q('#rlC').value, 10), u = driveDirect(q('#rlU').value.trim());
       if (!v) { toast('Escribe el nombre de la versión'); return; } if (!(c > 0)) { toast('El número de versión debe ser mayor que 0'); return; } if (!/^https:\/\//.test(u)) { toast('El enlace debe empezar con https://'); return; }
       if (cur && c <= cur.code && !(await confirmBox('El número no es mayor al anterior', 'Las aplicaciones solo se actualizan si el número es MAYOR que el que tienen instalado. ¿Publicar de todos modos?', 'Publicar'))) return;
       busy('Publicando…'); try { await Cloud.releasePublish(v, c, u, q('#rlN').value.trim(), mand); idle(); closeModal(); toast('Publicada la versión ' + v + '. Las aplicaciones recibirán el aviso', 4500); } catch (e) { idle(); toast(Cloud.errText(e), 4500); }
@@ -1282,7 +1293,7 @@
   }
   async function openExport() {
     if (!Cloud.user()) { toast('Inicia sesión como administrador para exportar'); return; }
-    if (!isAdmin()) { toast('Solo el administrador puede exportar KMZ'); return; }
+    if (!isSuper()) { toast('Solo el administrador principal puede exportar KMZ'); return; }
     if (!(await passGate('Exportar KMZ', 'Por seguridad, escribe tu contraseña de administrador para exportar.'))) return;
     const ch = S.feats.filter(f => f.st), nP = S.pts.length;
     let mode = 'all';
@@ -1979,23 +1990,34 @@
     if (!isAdmin()) return;
     busy('Cargando usuarios…'); let L;
     try { L = await Cloud.listUsers(); } catch (e) { idle(); toast(Cloud.errText(e), 3500); return; } idle();
-    const me = Cloud.user(), online = L.filter(u => ageCls(u.updated_at) === 'on').length;
+    const me = Cloud.user(), sup = isSuper(), online = L.filter(u => ageCls(u.updated_at) === 'on').length;
+    let flt = 'all', qtxt = '';
+    L.sort((x, y) => (new Date(y.updated_at || 0) - new Date(x.updated_at || 0)));
     const m = modal('<h3>Administración</h3><div class="kpis"><div class="stat"><small>Usuarios</small><b>' + L.length + '</b></div><div class="stat"><small>En línea</small><b>' + online + '</b></div><div class="stat"><small>Suspendidos</small><b>' + L.filter(u => !u.active).length + '</b></div></div>' +
-      '<div class="evtools"><button class="btn accent" id="adNew">' + ic('plus') + 'Nuevo usuario</button><button class="btn" id="adMap">' + ic('team') + 'Ver en el mapa</button></div><div id="adList"></div>');
+      '<div class="evtools"><button class="btn accent" id="adNew">' + ic('plus') + (sup ? 'Nuevo usuario' : 'Nuevo técnico') + '</button><button class="btn" id="adMap">' + ic('team') + 'Ver a todos en el mapa</button></div>' +
+      '<input class="sel" id="adQ" placeholder="Buscar por nombre, usuario o código" autocomplete="off" style="width:100%;margin:8px 0 6px">' +
+      '<div class="evfilter" id="adF"><button class="on" data-f="all">Todos</button><button data-f="on">En línea</button><button data-f="tecnico">Técnicos</button><button data-f="admin">Admins</button><button data-f="off">Suspendidos</button></div><div id="adList"></div>');
     hydrate(m);
-    m.querySelector('#adList').innerHTML = L.map(u => {
-      const z = u.lat != null ? zoneOf(u.lat, u.lon).zone : 'Sin ubicación todavía';
-      return '<button class="urow' + (u.active ? '' : ' off') + '" data-id="' + esc(u.id) + '"><span class="av ' + ageCls(u.updated_at) + '">' + esc(initials(u.name)) + '</span><div class="meta"><b>' + esc(u.name) + (u.id === me.id ? ' (tú)' : '') + '</b><small>@' + esc(u.username) + (u.code ? ' · ' + esc(u.code) : '') + ' · ' + (u.role === 'admin' ? 'Admin' : 'Técnico') + (u.active ? '' : ' · suspendido') + '</small><small>' + esc(z) + ' · ' + ago(u.updated_at) + '</small></div></button>';
-    }).join('');
+    const draw = () => {
+      const rows = L.filter(u => (flt === 'all' || (flt === 'on' && ageCls(u.updated_at) === 'on') || (flt === 'off' && !u.active) || u.role === flt) && (!qtxt || nrm([u.name, u.username, u.code].join(' ')).includes(qtxt)));
+      m.querySelector('#adList').innerHTML = rows.map(u => {
+        const z = u.lat != null ? zoneOf(u.lat, u.lon).zone : 'Sin ubicación todavía';
+        const lg = sup && u.login_at ? '<small>Entró ' + ago(u.login_at) + ' · ' + (u.login_kind === 'app' ? 'App' : u.login_kind === 'web' ? 'Web' : 'Dispositivo') + (u.login_ip ? ' · IP ' + esc(u.login_ip) : '') + '</small>' : '';
+        return '<button class="urow' + (u.active ? '' : ' off') + '" data-id="' + esc(u.id) + '"><span class="av ' + ageCls(u.updated_at) + '">' + esc(initials(u.name)) + '</span><div class="meta"><b>' + esc(u.name) + (u.id === me.id ? ' (tú)' : '') + (u.super ? ' ★' : '') + '</b><small>@' + esc(u.username) + (u.code ? ' · ' + esc(u.code) : '') + ' · ' + (u.role === 'admin' ? (u.super ? 'Admin principal' : 'Admin') : 'Técnico') + (u.active ? '' : ' · suspendido') + '</small><small>' + esc(z) + ' · ' + ago(u.updated_at) + '</small>' + lg + '</div></button>';
+      }).join('') || '<p class="lead">Nadie coincide con ese filtro.</p>';
+    };
+    draw();
     m.querySelector('#adNew').onclick = () => openNewUser();
     m.querySelector('#adMap').onclick = () => { closeModal(); teamToggle(true); };
+    m.querySelector('#adQ').oninput = ev => { qtxt = nrm(ev.target.value); draw(); };
+    m.querySelector('#adF').onclick = ev => { const b = ev.target.closest('button'); if (!b) return; flt = b.dataset.f; m.querySelectorAll('#adF button').forEach(x => x.classList.toggle('on', x === b)); draw(); };
     m.querySelector('#adList').onclick = ev => { const b = ev.target.closest('.urow'); if (b) { const u = L.find(x => x.id === b.dataset.id); if (u) openUserDetail(u); } };
   }
   function openNewUser() {
     const pw = genPass();
     const m = modal('<h3>Nuevo usuario</h3><label class="field"><span>NOMBRE COMPLETO *</span><input id="nuN" placeholder="Carlos Gómez" autocomplete="off"></label>' +
       '<div class="two"><label class="field"><span>USUARIO *</span><input id="nuU" placeholder="carlos.gomez" autocapitalize="none" autocomplete="off" spellcheck="false"></label><label class="field"><span>CÓDIGO TÉCNICO</span><input id="nuC" placeholder="T-0456" autocomplete="off"></label></div>' +
-      '<label class="field"><span>ROL</span><select class="sel" id="nuR"><option value="tecnico">Técnico</option><option value="admin">Administrador</option></select></label>' +
+      '<label class="field"><span>ROL</span><select class="sel" id="nuR"><option value="tecnico">Técnico</option>' + (isSuper() ? '<option value="admin">Administrador</option>' : '') + '</select></label>' +
       '<label class="field"><span>CONTRASEÑA INICIAL</span><input id="nuP" value="' + pw + '" autocapitalize="none" spellcheck="false"></label>' +
       '<p class="lead">El usuario deberá crear su propia contraseña la primera vez que entre.</p><div class="btnrow"><button class="btn" id="nuX">Cancelar</button><button class="btn accent" id="nuS">' + ic('check') + 'Crear</button></div>');
     hydrate(m);
@@ -2012,21 +2034,28 @@
       } catch (e) { btn.disabled = false; toast(Cloud.errText(e), 4000); }
     };
   }
+  const canEditUser = (u, self) => isSuper() ? true : (u.role !== 'admin');
   const canDelUser = (u, self) => !self && !(u.role === 'admin' && (!isSuper() || u.super || String(u.username || '').toLowerCase() === 'admin'));
   function openUserDetail(u) {
     const me = Cloud.user(), self = me && u.id === me.id, has = u.lat != null, z = has ? zoneOf(u.lat, u.lon) : null;
     const d = has && S.pos ? fmtD(hav(S.pos.lat, S.pos.lon, u.lat, u.lon)) : '';
     const m = modal('<h3>' + esc(u.name) + '</h3><p class="lead">@' + esc(u.username) + (u.code ? ' · ' + esc(u.code) : '') + ' · ' + (u.role === 'admin' ? 'Administrador' : 'Técnico') + (u.active === false ? ' · <b>suspendido</b>' : '') + '</p>' +
       '<div class="evinfo"><div><dt>Zona actual</dt><dd>' + esc(z ? z.zone : 'Sin ubicación todavía') + '</dd></div>' + (z && z.extra ? '<div><dt>Detalle</dt><dd>' + esc(z.extra) + '</dd></div>' : '') +
+      (isSuper() && u.login_at ? '<div><dt>Último inicio de sesión</dt><dd>' + fdate(u.login_at) + ' · ' + (u.login_kind === 'app' ? 'App Android' : u.login_kind === 'web' ? 'Web' : 'Dispositivo') + (u.login_device ? '<br>' + esc(u.login_device) : '') + (u.login_ip ? '<br>IP ' + esc(u.login_ip) : '') + '</dd></div>' : '') +
       '<div><dt>Última ubicación</dt><dd>' + ago(u.updated_at) + (has ? ' · ±' + Math.round(u.acc || 0) + ' m' + (d ? ' · a ' + d + ' de ti' : '') : '') + '</dd></div>' + (has ? '<div><dt>Coordenadas</dt><dd>' + coordTxt(u.lat, u.lon) + '</dd></div>' : '') + '</div>' +
       '<div class="d-actions"><button class="btn waze" id="udW"' + (has ? '' : ' disabled') + '>' + ic('nav') + 'Ir con Waze</button><button class="btn" id="udMap"' + (has ? '' : ' disabled') + '>' + ic('pin') + 'Ver en el mapa</button></div>' +
-      (isAdmin() ? '<div class="evgrid"><button class="btn ghost" id="udPw">' + ic('reset') + '<span>Contraseña</span></button><button class="btn ghost" id="udAct"' + (self ? ' disabled' : '') + '>' + ic('user') + '<span>' + (u.active === false ? 'Activar' : 'Suspender') + '</span></button>' + (canDelUser(u, self) ? '<button class="btn ghost" id="udDel">' + ic('trash') + '<span>Eliminar</span></button>' : '') + '</div>' : '') +
+      (isSuper() ? '<button class="btn wide" id="udLg" style="margin-bottom:6px">' + ic('pin') + 'Historial de inicios de sesión</button>' : '') +
+      (isAdmin() && canEditUser(u, self) ? '<button class="btn wide" id="udEd" style="margin-bottom:6px">' + ic('user') + 'Editar perfil</button>' : '') +
+      (isAdmin() && !canEditUser(u, self) ? '<p class="lead">Solo el administrador principal puede modificar a otros administradores.</p>' : '') +
+      (isAdmin() && canEditUser(u, self) ? '<div class="evgrid"><button class="btn ghost" id="udPw">' + ic('reset') + '<span>Contraseña</span></button><button class="btn ghost" id="udAct"' + (self || u.super ? ' disabled' : '') + '>' + ic('user') + '<span>' + (u.active === false ? 'Activar' : 'Suspender') + '</span></button>' + (canDelUser(u, self) ? '<button class="btn ghost" id="udDel">' + ic('trash') + '<span>Eliminar</span></button>' : '') + '</div>' : '') +
       '<button class="btn wide" id="udBack" style="margin-top:6px">' + (isAdmin() ? 'Volver a la lista' : 'Cerrar') + '</button>');
     hydrate(m); const q = s => m.querySelector(s);
     q('#udW').onclick = () => openExt('waze://?ll=' + u.lat + ',' + u.lon + '&navigate=yes', 'https://waze.com/ul?ll=' + u.lat + ',' + u.lon + '&navigate=yes&zoom=17');
     q('#udMap').onclick = async () => { closeModal(); if (!S.team.on) await teamToggle(true, false); S.userMoved = true; map.flyTo(u.lat, u.lon, Math.max(map.z, 16.5), 0.4); };
     q('#udBack').onclick = () => isAdmin() ? openAdmin() : closeModal();
-    if (isAdmin()) {
+    if (q('#udEd')) q('#udEd').onclick = () => openEditUser(u);
+    if (q('#udLg')) q('#udLg').onclick = () => openLogins(u);
+    if (isAdmin() && q('#udPw')) {
       q('#udPw').onclick = () => {
         const pw = genPass(), m2 = modal('<h3>Nueva contraseña</h3><p class="lead">Para ' + esc(u.name) + '. Tendrá que cambiarla al entrar y su sesión actual se cerrará.</p><label class="field"><span>CONTRASEÑA TEMPORAL</span><input id="rpP" value="' + pw + '" autocapitalize="none" spellcheck="false"></label><div class="btnrow"><button class="btn" id="rpX">Cancelar</button><button class="btn accent" id="rpS">Guardar</button></div>');
         m2.querySelector('#rpX').onclick = () => openUserDetail(u);
@@ -2037,6 +2066,29 @@
         q('#udAct').onclick = async () => { try { await Cloud.setActive(u.id, u.active === false); toast(u.active === false ? 'Usuario activado' : 'Usuario suspendido'); openAdmin(); } catch (e) { toast(Cloud.errText(e), 4000); } };
       }
     }
+  }
+
+  function openEditUser(u) {
+    const me = Cloud.user(), self = me && u.id === me.id, roleLocked = !isSuper() || u.super || self;
+    const m = modal('<h3>Editar perfil</h3><label class="field"><span>NOMBRE COMPLETO *</span><input id="euN" value="' + esc(u.name) + '" autocomplete="off"></label>' +
+      '<label class="field"><span>CÓDIGO TÉCNICO</span><input id="euC" value="' + esc(u.code || '') + '" autocomplete="off"></label>' +
+      '<label class="field"><span>ROL</span><select class="sel" id="euR"' + (roleLocked ? ' disabled' : '') + '><option value="tecnico"' + (u.role !== 'admin' ? ' selected' : '') + '>Técnico</option><option value="admin"' + (u.role === 'admin' ? ' selected' : '') + '>Administrador</option></select></label>' +
+      '<p class="lead">' + (u.super ? 'El administrador principal no puede cambiar de rol.' : self ? 'No puedes cambiar tu propio rol.' : isSuper() ? 'Si cambias el rol, a esa persona se le cerrará la sesión y entrará de nuevo con sus nuevos permisos.' : 'Solo el administrador principal cambia roles.') + '</p>' +
+      '<div class="btnrow"><button class="btn" id="euX">Cancelar</button><button class="btn accent" id="euS">' + ic('check') + 'Guardar</button></div>');
+    hydrate(m);
+    m.querySelector('#euX').onclick = () => openUserDetail(u);
+    m.querySelector('#euS').onclick = async () => {
+      const nm = m.querySelector('#euN').value.trim(), cd = m.querySelector('#euC').value.trim(), rl = m.querySelector('#euR').value;
+      if (rl !== u.role && !(await confirmBox('¿Cambiar el rol de ' + u.name + '?', 'Pasará a ser ' + (rl === 'admin' ? 'ADMINISTRADOR' : 'técnico') + ' y su sesión se cerrará.', 'Cambiar'))) return;
+      try { await Cloud.updateUser(u.id, nm, cd, rl); toast('Perfil actualizado'); openAdmin(); } catch (e) { toast(Cloud.errText(e), 4000); }
+    };
+  }
+  async function openLogins(u) {
+    busy('Cargando…'); let L; try { L = await Cloud.userLogins(u.id); } catch (e) { idle(); toast(Cloud.errText(e), 3500); return; } idle();
+    const m = modal('<h3>Inicios de sesión</h3><p class="lead">' + esc(u.name) + ' · los últimos ' + L.length + '. La ubicación solo aparece si el dispositivo la tenía disponible al entrar; la IP es la de su red.</p><div id="lgL"></div><button class="btn wide" id="lgB">Volver</button>');
+    m.querySelector('#lgL').innerHTML = L.map((x, i) => '<div class="urow" style="cursor:default"><div class="meta"><b>' + fdate(x.at) + ' · ' + (x.kind === 'app' ? 'App Android' : x.kind === 'web' ? 'Web' : 'Dispositivo') + '</b><small>' + esc(x.device || 'Dispositivo desconocido') + '</small><small>IP ' + esc(x.ip || 'desconocida') + (x.lat != null ? ' · ' + coordTxt(x.lat, x.lon) : ' · sin ubicación') + '</small>' + (x.lat != null ? '<small><a href="#" data-i="' + i + '">Ver dónde en el mapa</a></small>' : '') + '</div></div>').join('') || '<p class="lead">Sin registros todavía. Aparecerán la próxima vez que entre.</p>';
+    m.querySelector('#lgL').onclick = ev => { const a2 = ev.target.closest('a[data-i]'); if (!a2) return; ev.preventDefault(); const x = L[+a2.dataset.i]; closeModal(); S.userMoved = true; map.flyTo(x.lat, x.lon, Math.max(map.z, 16), 0.4); toast('Lugar donde inició sesión'); };
+    m.querySelector('#lgB').onclick = () => openUserDetail(u);
   }
 
   /* ---------- conexión ---------- */

@@ -33,7 +33,9 @@
     bad_name: 'Escribe el nombre completo', weak_password: 'La contraseña es muy corta (mínimo 8 para la tuya, 6 para una inicial)',
     bad_items: 'Datos no válidos', cannot_delete_self: 'No puedes eliminar ni suspender tu propia cuenta', not_found: 'El usuario ya no existe', bad_location: 'Ubicación no válida',
     bad_comment: 'Escribe un comentario (máximo 1500 letras)',
-    forbidden_admin: 'Solo el administrador principal puede eliminar administradores', cannot_delete_main: 'El administrador principal no se puede eliminar',
+    forbidden_admin: 'Solo el administrador principal puede modificar o eliminar administradores', cannot_delete_main: 'El administrador principal no se puede eliminar',
+    forbidden_admin_create: 'Solo el administrador principal puede crear administradores. Tú puedes crear técnicos', forbidden_role: 'Solo el administrador principal puede cambiar el rol de un usuario',
+    cannot_change_main: 'El administrador principal no se puede cambiar ni suspender', cannot_change_self_role: 'No puedes cambiar tu propio rol', bad_role: 'Rol no válido',
     bad_version: 'Escribe el nombre de la versión (por ejemplo 3.12)', bad_code: 'El número de versión debe ser un entero mayor que 0', bad_url: 'El enlace debe empezar con https://',
     network: 'No hay conexión con el servidor. Revisa tu internet', config: 'Falta configurar el servidor'
   };
@@ -77,7 +79,8 @@
     session: () => ses,
     user: () => (ses ? ses.user : null),
     async login(u, p) {
-      const r = await rpc('cj_login', { p_user: u, p_pass: p });
+      let info = {}; try { info = (g.__loginInfo && g.__loginInfo()) || {}; } catch (e) { }
+      const r = await rpc('cj_login', { p_user: u, p_pass: p, p_info: info });
       if (r && r.error) { const e = new Error(MSG[r.error] || r.error); e.code = r.error; throw e; }
       ses = { token: r.token, user: r.user, boot: BOOT }; wr(K_SES, ses); await remember(u, p); native(); return ses;
     },
@@ -108,6 +111,8 @@
     listUsers: () => rpc('cj_list_users', { p_token: tk() }),
     createUser: (username, name, code, role, pass) => rpc('cj_create_user', { p_token: tk(), p_username: username, p_name: name, p_code: code || '', p_role: role, p_pass: pass }),
     deleteUser: id => rpc('cj_delete_user', { p_token: tk(), p_id: id }),
+    updateUser: (id, name, code, role) => rpc('cj_update_user', { p_token: tk(), p_id: id, p_name: name, p_code: code || '', p_role: role }),
+    userLogins: id => rpc('cj_user_logins', { p_token: tk(), p_id: id }),
     resetPassword: (id, pass) => rpc('cj_reset_password', { p_token: tk(), p_id: id, p_new: pass }),
     setActive: (id, on) => rpc('cj_set_active', { p_token: tk(), p_id: id, p_active: !!on }),
     sendLocation: (lat, lon, acc, speed) => rpc('cj_send_location', { p_token: tk(), p_lat: lat, p_lon: lon, p_acc: acc == null ? null : acc, p_speed: speed == null || !isFinite(speed) ? null : speed }, 10000),
