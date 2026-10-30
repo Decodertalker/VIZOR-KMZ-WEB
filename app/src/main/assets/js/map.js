@@ -91,7 +91,7 @@
           if (own === this.gOwn) return; this.gOwn = own;
           try { gm.setOptions({ gestureHandling: own ? 'none' : 'greedy' }); } catch (e) { }
           this.cv.style.pointerEvents = own ? '' : 'none';
-          if (own) this._push(true);
+          if (own) { this._push(true); this._glSyncStart(); }
           this.onGoogleMode && this.onGoogleMode(own); this.invalidate();
         };
         gm.addListener('renderingtype_changed', () => this._gMode());
@@ -106,15 +106,41 @@
       }
       this._push(true); this.invalidate(); setTimeout(() => this._gMode && this._gMode(), 400); setTimeout(() => this._gMode && this._gMode(), 1500); setTimeout(() => this._gMode && this._gMode(), 4000); setTimeout(() => this._gMode && this._gMode(), 9000);
     }
+    /* Sincronía exacta: Google avisa su cámara REAL en cada cuadro que dibuja (WebGLOverlayView). Dibujo mis datos en ese mismo instante con esa cámara. */
+    _glSyncStart() {
+      try {
+        if (this._ov || !this.gm || !(g.google && g.google.maps && g.google.maps.WebGLOverlayView)) return;
+        const ov = new g.google.maps.WebGLOverlayView(); this._ov = ov; this._ovSeen = 0;
+        ov.onDraw = ({ transformer }) => {
+          try {
+            if (!this.gOwn || !transformer) return;
+            const c = this.center(), d = 0.002, W = this.w, H = this.h;
+            const pr = (lat, lon) => { const q = transformer.fromLatLngAltitude({ lat, lng: lon, altitude: 0 }); const wv = q[15] || 1; return [(q[12] / wv * 0.5 + 0.5) * W, (0.5 - q[13] / wv * 0.5) * H]; };
+            const a = pr(c.lat, c.lon), b = pr(c.lat, c.lon + d);
+            const s = (b[0] - a[0]) / (mxOf(c.lon + d) - mxOf(c.lon));
+            if (!(s > 0) || !isFinite(a[0] + a[1] + s)) return;
+            const z = Math.log2(s / TS), cx = mxOf(c.lon) - (a[0] - W / 2) / s, cy = myOf(c.lat) - (a[1] - H / 2) / s;
+            if (Math.abs(z - this.z) > 0.6 || Math.abs(cx - this.cx) * s > 400 || Math.abs(cy - this.cy) * s > 400) return;   // lectura rara: no me fío
+            this._ovSeen = performance.now();
+            const o = [this.cx, this.cy, this.z, this.s];
+            this.cx = cx; this.cy = cy; this.z = z; this.s = s; this._inGl = true;
+            try { this._render(); } finally { this._inGl = false; this.cx = o[0]; this.cy = o[1]; this.z = o[2]; this.s = o[3]; }
+          } catch (e) { }
+        };
+        ov.setMap(this.gm);
+        setTimeout(() => { if (!this._ovSeen && this._ov) { try { this._ov.setMap(null); } catch (e) { } this._ov = null; this._ovFail = 1; this.invalidate(); } }, 4000);
+      } catch (e) { this._ov = null; }
+    }
+    _glActive() { return !!(this._ov && this._ovSeen && this.gOwn && !this._ovFail); }
     _zoomHide(on) {
       if (on === !!this._zh) { if (on) { clearTimeout(this._zhT); this._zhT = setTimeout(() => this._zoomHide(false), 1500); } return; }
       this._zh = on; clearTimeout(this._zhT);
       this.cv.style.transition = on ? 'none' : 'opacity .18s'; this.cv.style.opacity = on ? '0' : '1';
       if (on) this._zhT = setTimeout(() => { this._hold = 0; this._poll(); this._zoomHide(false); }, 1500); else this.invalidate();
     }
-    googleMode() { return !this.gm ? '' : this.gOwn ? 'vectorial' : 'clásico'; }
+    googleMode() { return !this.gm ? '' : this.gOwn ? (this._glActive() ? 'vectorial · sincronía exacta' : 'vectorial') : 'clásico'; }
     setVector(v) { this.vec = v || null; this.invalidate(); }
-    detachGoogle() { this.gm = null; this.gOwn = false; this.cv.style.pointerEvents = ''; this.invalidate(); }
+    detachGoogle() { try { if (this._ov) this._ov.setMap(null); } catch (e) { } this._ov = null; this._ovSeen = 0; this.gm = null; this.gOwn = false; this.cv.style.pointerEvents = ''; this.invalidate(); }
     _push(force) {
       if (!this.gm) return;
       this._hold = performance.now() + 300;
@@ -286,7 +312,8 @@
       const ctx = this.ctx, dpr = this.dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       if (this.vec) { if (this.rot) { ctx.fillStyle = this.bg; ctx.fillRect(0, 0, this.w, this.h); this._rotOn(ctx); } this.vec.draw(ctx, this); this.onDraw && this.onDraw(ctx, this); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); return; }
-      if (this.gm && this.gOwn) this._push();   // la cámara de Google se mueve en este mismo cuadro, antes de dibujar encima
+      if (!this._inGl && this._glActive()) { this._push(); try { this._ov.requestRedraw(); } catch (e) { } return; }   // el dibujo real ocurre dentro del cuadro de Google (onDraw)
+      if (this.gm && this.gOwn && !this._inGl) this._push();   // la cámara de Google se mueve en este mismo cuadro, antes de dibujar encima
       if (this.gm) ctx.clearRect(0, 0, this.w, this.h);
       else {
         ctx.fillStyle = this.bg; ctx.fillRect(0, 0, this.w, this.h);

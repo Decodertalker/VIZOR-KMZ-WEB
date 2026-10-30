@@ -157,3 +157,6 @@ PASO OBLIGATORIO: ejecutar 7_admin_principal.sql en Supabase (después de 1_ a 6
 
 == v3.15 ==
 - Zoom en Google (modo clásico): los datos se ocultan mientras Google anima el zoom y reaparecen alineados; "Mapa y capas" muestra el modo de Google (vectorial/clásico).
+
+== v3.16 ==
+- Google vectorial: los datos se dibujan dentro del mismo cuadro de Google con su cámara real (WebGLOverlayView), sin desfase al hacer zoom. Si no está disponible, se usa el método anterior.
