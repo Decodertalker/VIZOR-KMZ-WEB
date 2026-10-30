@@ -160,3 +160,6 @@ PASO OBLIGATORIO: ejecutar 7_admin_principal.sql en Supabase (después de 1_ a 6
 
 == v3.16 ==
 - Google vectorial: los datos se dibujan dentro del mismo cuadro de Google con su cámara real (WebGLOverlayView), sin desfase al hacer zoom. Si no está disponible, se usa el método anterior.
+
+== v3.17 ==
+- Zoom máximo en Google satélite igualado al que Google permite en la zona (MaxZoomService + lectura de su cámara): los datos ya no se escapan al acercar demasiado.

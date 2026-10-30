@@ -140,13 +140,34 @@
     }
     googleMode() { return !this.gm ? '' : this.gOwn ? (this._glActive() ? 'vectorial · sincronía exacta' : 'vectorial') : 'clásico'; }
     setVector(v) { this.vec = v || null; this.invalidate(); }
-    detachGoogle() { try { if (this._ov) this._ov.setMap(null); } catch (e) { } this._ov = null; this._ovSeen = 0; this.gm = null; this.gOwn = false; this.cv.style.pointerEvents = ''; this.invalidate(); }
+    detachGoogle() { this.maxZ = 21; try { if (this._ov) this._ov.setMap(null); } catch (e) { } this._ov = null; this._ovSeen = 0; this.gm = null; this.gOwn = false; this.cv.style.pointerEvents = ''; this.invalidate(); }
     _push(force) {
       if (!this.gm) return;
       this._hold = performance.now() + 300;
       try { this.gm.moveCamera({ center: { lat: latOf(this.cy), lng: lonOf(this.cx) }, zoom: this.z }); } catch (e) { }
     }
+    /* Google limita el zoom máximo (en satélite depende de la zona). Si mi mapa sigue acercando más que Google, los datos se "escapan" de la imagen: igualo mi límite al suyo. */
+    _zoomLimit() {
+      const gm = this.gm; if (!gm) return;
+      const now = performance.now();
+      if (this.gOwn && now > this._hold + 350 && !this.anim && !this.zt) {   // ya se asentó: lo que Google reporta es lo que realmente muestra
+        const gz = gm.getZoom();
+        if (gz != null && gz >= 10 && this.z - gz > 0.02) { this.maxZ = Math.max(this.minZ, gz); this.z = this.maxZ; this._setS(); this._push(); this.invalidate(); }
+      }
+      if (now - (this._mzAt || 0) > 1500 && g.google && g.google.maps && g.google.maps.MaxZoomService) {
+        this._mzAt = now;
+        try {
+          const t = gm.getMapTypeId && gm.getMapTypeId();
+          if (t !== 'satellite' && t !== 'hybrid') { this.maxZ = 21; return; }
+          const c = gm.getCenter(); if (!c) return;
+          (this._mzs = this._mzs || new g.google.maps.MaxZoomService()).getMaxZoomAtLatLng(c, r => {
+            if (r && r.status === 'OK' && r.zoom >= 10 && r.zoom < 21 && this.gm === gm) { this.maxZ = r.zoom; if (this.z > r.zoom) { this.z = r.zoom; this._setS(); this._push(); this.invalidate(); } }
+          });
+        } catch (e) { }
+      }
+    }
     _poll() {
+      this._zoomLimit();
       if (!this.gm || this.gOwn || this.anim || performance.now() < this._hold) return;
       const c = this.gm.getCenter(), z = this.gm.getZoom(); if (!c || z == null) return;
       const nx = mxOf(c.lng()), ny = myOf(c.lat());
