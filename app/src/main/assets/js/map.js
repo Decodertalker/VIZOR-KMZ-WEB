@@ -101,8 +101,7 @@
         });
         gm.addListener('idle', () => { if (this._zh) { this._hold = 0; this._poll(); this._zoomHide(false); } });
         gm.addListener('click', e => { if (this.gOwn || !e.latLng || !this.onTap) return; const p = this.toScreen(e.latLng.lat(), e.latLng.lng()); this.onTap(p[0], p[1]); });
-        const loop = () => { this._poll(); requestAnimationFrame(loop); };
-        requestAnimationFrame(loop);
+        if (!this._loopOn) { this._loopOn = 1; const loop = () => { this._poll(); requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
       }
       this._push(true); this.invalidate(); setTimeout(() => this._gMode && this._gMode(), 400); setTimeout(() => this._gMode && this._gMode(), 1500); setTimeout(() => this._gMode && this._gMode(), 4000); setTimeout(() => this._gMode && this._gMode(), 9000);
     }
@@ -140,11 +139,11 @@
     }
     googleMode() { return !this.gm ? '' : this.gOwn ? (this._glActive() ? 'vectorial · sincronía exacta' : 'vectorial') : 'clásico'; }
     setVector(v) { this.vec = v || null; this.invalidate(); }
-    detachGoogle() { this.maxZ = 21; try { if (this._ov) this._ov.setMap(null); } catch (e) { } this._ov = null; this._ovSeen = 0; this.gm = null; this.gOwn = false; this.cv.style.pointerEvents = ''; this.invalidate(); }
+    detachGoogle() { this._gl = 0; this.maxZ = 21; try { if (this._ov) this._ov.setMap(null); } catch (e) { } this._ov = null; this._ovSeen = 0; this.gm = null; this.gOwn = false; this.cv.style.pointerEvents = ''; this.invalidate(); }
     _push(force) {
       if (!this.gm) return;
       this._hold = performance.now() + 300;
-      try { this.gm.moveCamera({ center: { lat: latOf(this.cy), lng: lonOf(this.cx) }, zoom: this.z }); } catch (e) { }
+      try { this.gm.moveCamera({ center: { lat: latOf(this.cy), lng: lonOf(this.cx) }, zoom: Math.min(this.z, 21) }); } catch (e) { }
     }
     /* Google limita el zoom máximo (en satélite depende de la zona). Si mi mapa sigue acercando más que Google, los datos se "escapan" de la imagen: igualo mi límite al suyo. */
     _zoomLimit() {
@@ -156,7 +155,7 @@
         const gc = gm.getCenter();
         const off = gz == null || !gc || Math.abs(gz - this.z) > 1.2 || Math.abs(mxOf(gc.lng()) - this.cx) * this.s > 600 || Math.abs(myOf(gc.lat()) - this.cy) * this.s > 600;
         if (off && !(gz >= 10 && this.z - gz > 0.02)) {   // Google quedó en otra vista (p. ej. el mundo entero): se la vuelvo a indicar; si insiste, se deja Google
-          if (now - (this._offAt || 0) > 500) { this._offAt = now; this._offN = (this._offN || 0) + 1; if (this._offN > 6) { this._offN = 0; this.onGoogleLost && this.onGoogleLost(); } else this._push(); }
+          if (now - (this._offAt || 0) > 500) { this._offAt = now; this._offN = (this._offN || 0) + 1; if (this._offN > 3) { this._offN = 0; this.onGoogleLost && this.onGoogleLost(); } else this._push(); }
         } else this._offN = 0;
         if (gz != null && gz >= 10 && this.z - gz > 0.02) { this.maxZ = Math.max(this.minZ, gz); this.z = this.maxZ; this._setS(); this._push(); this.invalidate(); }
       }

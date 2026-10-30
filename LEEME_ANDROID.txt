@@ -167,3 +167,6 @@ PASO OBLIGATORIO: ejecutar 7_admin_principal.sql en Supabase (después de 1_ a 6
 == v3.18 ==
 - Corregido: el mapa podía quedar en vista del mundo al iniciar Google (se copiaba la cámara inicial de Google). Ahora no se copia al arrancar y se le reenvía la vista; si Google no la sigue, se pasa al satélite propio con aviso.
 - El menú muestra el mapa realmente en uso en vez de "OpenStreetMap".
+
+== v3.19 ==
+- Si Google queda en otra vista que la app (p. ej. el mundo entero), se detecta en ~2 s y se recrea el mapa de Google con la vista correcta; si vuelve a fallar, se usa el satélite propio.
