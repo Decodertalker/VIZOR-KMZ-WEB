@@ -81,7 +81,7 @@
     attachGoogle(gm) {
       if (this.gm === gm) return;
       this.gOwn = false; this.cv.style.pointerEvents = 'none';   // por defecto Google recibe los gestos; este lienzo solo dibuja encima
-      this.gm = gm; this.rot = 0; this.rotT = null; this.onRot && this.onRot(0); this.src = null; this.tiles.clear(); this.queue = [];
+      this.gm = gm; this._attAt = performance.now(); this.rot = 0; this.rotT = null; this.onRot && this.onRot(0); this.src = null; this.tiles.clear(); this.queue = [];
       if (!this._gl) {
         this._gl = 1;
         // Mapa vectorial de Google: admite zoom fraccionado, así que lo manejo yo con mis propios gestos (mismo cuadro = elementos perfectamente sincronizados)
@@ -150,8 +150,14 @@
     _zoomLimit() {
       const gm = this.gm; if (!gm) return;
       const now = performance.now();
+      if (!this.gOwn && now - (this._attAt || now) > 5000 && now > this._hold + 350 && !this.anim) { const gz0 = gm.getZoom(); if (gz0 != null && gz0 < this.minZ) { this._offN = (this._offN || 0) + 1; if (this._offN > 120) { this._offN = 0; this.onGoogleLost && this.onGoogleLost(); } } else this._offN = 0; }
       if (this.gOwn && now > this._hold + 350 && !this.anim && !this.zt) {   // ya se asentó: lo que Google reporta es lo que realmente muestra
         const gz = gm.getZoom();
+        const gc = gm.getCenter();
+        const off = gz == null || !gc || Math.abs(gz - this.z) > 1.2 || Math.abs(mxOf(gc.lng()) - this.cx) * this.s > 600 || Math.abs(myOf(gc.lat()) - this.cy) * this.s > 600;
+        if (off && !(gz >= 10 && this.z - gz > 0.02)) {   // Google quedó en otra vista (p. ej. el mundo entero): se la vuelvo a indicar; si insiste, se deja Google
+          if (now - (this._offAt || 0) > 500) { this._offAt = now; this._offN = (this._offN || 0) + 1; if (this._offN > 6) { this._offN = 0; this.onGoogleLost && this.onGoogleLost(); } else this._push(); }
+        } else this._offN = 0;
         if (gz != null && gz >= 10 && this.z - gz > 0.02) { this.maxZ = Math.max(this.minZ, gz); this.z = this.maxZ; this._setS(); this._push(); this.invalidate(); }
       }
       if (now - (this._mzAt || 0) > 1500 && g.google && g.google.maps && g.google.maps.MaxZoomService) {
@@ -170,6 +176,7 @@
       this._zoomLimit();
       if (!this.gm || this.gOwn || this.anim || performance.now() < this._hold) return;
       const c = this.gm.getCenter(), z = this.gm.getZoom(); if (!c || z == null) return;
+      if (performance.now() - (this._attAt || 0) < 2500 || z < this.minZ) { if (z < this.minZ || Math.abs(z - this.z) > 1.2) { if (performance.now() - (this._offAt || 0) > 400) { this._offAt = performance.now(); this._push(); } } return; }   // Google recién creado (o en una vista del mundo): no copio su cámara, le indico la mía
       const nx = mxOf(c.lng()), ny = myOf(c.lat());
       if (Math.abs(nx - this.cx) * this.s > 0.3 || Math.abs(ny - this.cy) * this.s > 0.3 || Math.abs(z - this.z) > 0.001) {
         this.cx = nx; this.cy = ny; this.z = z; this._setS(); this.invalidate(); this._emitMove();
