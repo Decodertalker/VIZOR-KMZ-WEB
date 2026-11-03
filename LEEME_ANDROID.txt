@@ -185,3 +185,11 @@ PASO OBLIGATORIO: ejecutar 7_admin_principal.sql en Supabase (después de 1_ a 6
 
 == v3.24 ==
 - El Registro de diagnostico solo aparece para el usuario admin.
+
+== v3.25 ==
+- Publicar actualizacion: el numero de version y el nombre ya vienen rellenados con los de esta version (antes desde la web salia 1 y la app nunca ofrecia la actualizacion). "Estas al dia" ahora muestra el numero instalado y el publicado.
+
+== v3.26 ==
+- Con un punto buscado (georeferencia): "Cajas cercanas" y la distancia del detalle se miden desde ese punto, no desde tu ubicacion.
+- Los cuadros (cajas cercanas, detalle, punto buscado, metraje) se pueden mover en la web; doble clic en el encabezado para volver.
+- PRUEBA (solo usuario admin): metraje por calles con Google (Routes/Directions API) desde el punto buscado a la caja mas cercana; se puede cambiar de caja, auto/a pie y eliminar.

@@ -534,6 +534,7 @@
       ctx.beginPath(); ctx.arc(x, y - 31, 5.5, 0, 6.2832); ctx.fillStyle = '#1b2230'; ctx.fill();
     }
 
+    drawRoads(ctx, m);
     // mi ubicación
     if (S.pos) {
       const [x, y] = m.toScreen(S.pos.lat, S.pos.lon), rr = S.pos.acc / m.metersPerPx(S.pos.lat);
@@ -601,6 +602,7 @@
       const h = hitPoint(px, py), ll = h ? { lat: h.c[1], lon: h.c[0] } : map.fromScreen(px, py);
       S.meas.pts.push([ll.lon, ll.lat]); updateMeasure(); return;
     }
+    const hr = hitRoad(px, py); if (hr) { openRoadBar(hr); map.invalidate(); return; }
     const ht = hitTeam(px, py); if (ht) { openUserDetail(ht); return; }
     const he = hitEval(px, py); if (he) { openEvalDetail(he); return; }
     const h = hitPoint(px, py);
@@ -685,7 +687,7 @@
 
   /* ---------- cercanas ---------- */
   const RADII = [[300, '300 m'], [1000, '1 km'], [3000, '3 km'], [10000, '10 km']];
-  function refPoint() { if (S.pos) return { lat: S.pos.lat, lon: S.pos.lon, gps: true }; const c = map.center(); return { lat: c.lat, lon: c.lon, gps: false }; }
+  function refPoint() { if (S.pin) return { lat: S.pin.lat, lon: S.pin.lon, gps: false, pin: true }; if (S.pos) return { lat: S.pos.lat, lon: S.pos.lon, gps: true }; const c = map.center(); return { lat: c.lat, lon: c.lon, gps: false }; }
   function nearest(ref, max, filter) {
     const out = [];
     for (const p of S.pts) {
@@ -717,7 +719,7 @@
     const me = evTech(); return me ? S.evals.some(e => e.asg === me.id && e.estado !== 'hecha') : false;
   }
   function updateNearby() {
-    const hasO = nbOrders(), ordMode = hasO && S.nbMode === 'ordenes', hd = $('#nearby h2');
+    const hasO = nbOrders() && !S.pin, ordMode = hasO && S.nbMode === 'ordenes', hd = $('#nearby h2');
     const modeChips = hasO ? '<button class="chip' + (!ordMode ? ' on' : '') + '" data-m="cajas">Cajas</button><button class="chip' + (ordMode ? ' on' : '') + '" data-m="ordenes">Órdenes</button>' : '';
     if (hd) hd.textContent = ordMode ? 'Órdenes cercanas' : 'Cajas cercanas';
     if (ordMode) {
@@ -734,14 +736,15 @@
     if (!S.pts.length) return;
     const ref = refPoint(), all = nearest(ref, 60), inR = all.filter(a => a[0] <= S.radius);
     const rl = (RADII.find(r => r[0] === S.radius) || [0, ''])[1];
-    $('#nbChips').innerHTML = modeChips + RADII.map(r => '<button class="chip' + (r[0] === S.radius ? ' on' : '') + '" data-r="' + r[0] + '">' + r[1] + '</button>').join('');
+    $('#nbChips').innerHTML = (S.pin ? '<button class="chip on" data-pb="1">← Punto buscado</button>' : '') + modeChips + RADII.map(r => '<button class="chip' + (r[0] === S.radius ? ' on' : '') + '" data-r="' + r[0] + '">' + r[1] + '</button>').join('');
     const list = $('#nbList');
-    $('#nbSub').textContent = (inR.length ? inR.length + (inR.length >= 60 ? '+' : '') + ' en ' + rl : 'Ninguna en ' + rl) + (ref.gps ? ' · desde tu ubicación' : ' · desde el centro del mapa');
+    $('#nbSub').textContent = (inR.length ? inR.length + (inR.length >= 60 ? '+' : '') + ' en ' + rl : 'Ninguna en ' + rl) + (ref.pin ? ' · desde el punto buscado' : ref.gps ? ' · desde tu ubicación' : ' · desde el centro del mapa');
     if (inR.length) list.innerHTML = inR.slice(0, 40).map(a => cardHtml(a[1], a[0])).join('');
     else list.innerHTML = all.slice(0, 3).map(a => cardHtml(a[1], a[0])).join('') || '<div class="empty">No hay cajas cargadas.</div>';
   }
   $('#nbChips').onclick = e => {
     const b = e.target.closest('[data-r]'), mo = e.target.closest('[data-m]'), oa = e.target.closest('[data-oa]');
+    if (e.target.closest('[data-pb]')) { S.pinNear = false; layout(); return; }
     if (b) { S.radius = +b.dataset.r; saveSettings(); updateNearby(); }
     if (mo) { S.nbMode = mo.dataset.m; saveSettings(); updateNearby(); }
     if (oa) { S.autoOrd = !autoOrdOn(); _ord.t = 0; saveSettings(); updateNearby(); map.invalidate(); }
@@ -804,15 +807,17 @@
   /* ---------- hojas ---------- */
   function setSheetH() {
     let el = null;
-    if (S.pick) el = $('#pickBar'); else if (S.meas.on) el = $('#measureBar'); else el = S.sel ? $('#detail') : S.pin ? $('#pinBar') : $('#nearby');
+    if (S.pick) el = $('#pickBar'); else if (S.meas.on) el = $('#measureBar'); else el = S.sel ? $('#detail') : (S.pin && !S.pinNear) ? $('#pinBar') : $('#nearby');
     let h = el && !el.hidden ? el.offsetHeight + (el.id === 'detail' || el.id === 'nearby' ? 0 : 14) : 0;
-    if (el && el.id === 'measureBar' && el.style.top) h = 0;  // si el cuadro está movido, no empuja los botones del mapa
+    if (el && el.style.top) h = 0;  // si el cuadro está movido, no empuja los botones del mapa
     document.documentElement.style.setProperty('--sheet-h', Math.max(h, 0) + 'px');
   }
   function layout() {
     const meas = S.meas.on, pick = !!S.pick;
-    $('#nearby').hidden = !!S.sel || meas || pick || !!S.pin;
-    $('#pinBar').hidden = !S.pin || !!S.sel || meas || pick;
+    $('#nearby').hidden = !!S.sel || meas || pick || (!!S.pin && !S.pinNear);
+    $('#pinBar').hidden = !S.pin || !!S.sel || meas || pick || !!S.pinNear;
+    const rp = $('#pinRoadRow'); if (rp) rp.hidden = !isSuper();
+    const ar = $('#aRoad'); if (ar) ar.hidden = !(isSuper() && S.pin && S.sel);
     $('#detail').hidden = !S.sel || meas || pick;
     $('#measureBar').hidden = !meas; $('#pickLayer').hidden = !pick;
     $('#fabs').hidden = pick || !!S.sel; $('#top').hidden = pick; $('#pills').hidden = pick;
@@ -835,12 +840,12 @@
 
   function renderDetail(soft) {
     const f = S.sel; if (!f) return;
-    const k = kindOf(f), d = S.pos ? hav(S.pos.lat, S.pos.lon, f.c[1], f.c[0]) : null;
+    const k = kindOf(f), rf = S.pin || S.pos, d = rf ? hav(rf.lat, rf.lon != null ? rf.lon : rf.lng, f.c[1], f.c[0]) : null;
     if (soft) { const sd = $('#dStats .dist'); if (sd) sd.textContent = fmtD(d); return; }
     $('#dIco').className = 'd-ico ' + k; $('#dIco').innerHTML = ic('box'); hydrate($('#dIco'));
     $('#dName').textContent = f.n; $('#dSub').textContent = subOf(f);
     const estado = f.st === 'new' ? 'Nueva' : f.st === 'edit' ? 'Editada' : 'Original';
-    $('#dStats').innerHTML = '<div class="stat"><small>Distancia</small><b class="dist">' + (d == null ? '—' : fmtD(d)) + '</b></div><div class="stat"><small>Tipo</small><b>' + esc(kindLabel(f)) + '</b></div><div class="stat"><small>Estado</small><b>' + estado + '</b></div>';
+    $('#dStats').innerHTML = '<div class="stat"><small>' + (S.pin ? 'Al punto' : 'Distancia') + '</small><b class="dist">' + (d == null ? '—' : fmtD(d)) + '</b></div><div class="stat"><small>Tipo</small><b>' + esc(kindLabel(f)) + '</b></div><div class="stat"><small>Estado</small><b>' + estado + '</b></div>';
     const rows = [['Municipio', f.g[0] || '—'], ['Cabina / carpeta', f.g.slice(1).join(' › ') || '—'], ['Latitud, longitud', f.c[1].toFixed(6) + ', ' + f.c[0].toFixed(6)]];
     Object.keys(f.x || {}).forEach(key => { if (norm(f.x[key]) !== norm(f.n)) rows.push([key, f.x[key]]); });
     if (f.d) rows.push(['Notas', f.d]);
@@ -946,33 +951,41 @@
   $('#mUndo').onclick = () => { S.meas.pts.pop(); updateMeasure(); };
   $('#mClear').onclick = () => { S.meas.pts = []; updateMeasure(); };
   $('#mDone').onclick = stopMeasure;
-  // El cuadro de medición se puede mover libremente (web con mouse o ventana ancha). La posición se recuerda.
-  (function () {
-    const bar = $('#measureBar'), K = 'cajas.mb.pos', can = () => window.matchMedia('(pointer:fine),(min-width:700px)').matches;
+  // Los cuadros se pueden mover libremente (web con mouse o ventana ancha). La posición se recuerda; doble clic en el encabezado para volver.
+  function makeMovable(bar, K, handle) {
+    const can = () => window.matchMedia('(pointer:fine),(min-width:700px)').matches;
     let pos = null; try { pos = JSON.parse(localStorage.getItem(K) || 'null'); } catch (e) { }
-    const reset = () => { ['left', 'top', 'right', 'bottom', 'width', 'margin'].forEach(p => bar.style[p] = ''); };
+    const reset = () => { ['left', 'top', 'right', 'bottom', 'width', 'margin', 'transform'].forEach(p => bar.style[p] = ''); bar.classList.remove('mv'); };
     const place = () => {
       if (!can() || !pos || bar.hidden) { if (!pos || !can()) reset(); return; }
       const par = bar.offsetParent || document.body, pr = par.getBoundingClientRect(), w = Math.min(pos.w || bar.offsetWidth, innerWidth - 8), h = bar.offsetHeight;
-      const x = Math.max(4, Math.min(pos.x, innerWidth - w - 4)), y = Math.max(4, Math.min(pos.y, innerHeight - h - 4));
-      Object.assign(bar.style, { left: (x - pr.left) + 'px', top: (y - pr.top) + 'px', right: 'auto', bottom: 'auto', margin: '0', width: w + 'px' });
+      const x = Math.max(4, Math.min(pos.x, innerWidth - w - 4)), y = Math.max(4, Math.min(pos.y, innerHeight - Math.min(h, 120) - 4));
+      Object.assign(bar.style, { left: (x - pr.left) + 'px', top: (y - pr.top) + 'px', right: 'auto', bottom: 'auto', margin: '0', width: w + 'px', transform: 'none' }); bar.classList.add('mv');
     };
-    let drag = null;
+    let drag = null, moved = false;
+    const inHandle = t => handle ? !!t.closest(handle) : true;
     bar.addEventListener('pointerdown', e => {
-      if (!can() || e.button > 0 || e.target.closest('button,input,select,textarea,a')) return;
-      const r = bar.getBoundingClientRect(); drag = { dx: e.clientX - r.left, dy: e.clientY - r.top, w: r.width, id: e.pointerId };
-      bar.setPointerCapture(e.pointerId); bar.classList.add('drag'); e.preventDefault();
+      if (!can() || e.button > 0 || e.target.closest('button,input,select,textarea,a') || !inHandle(e.target)) return;
+      const r = bar.getBoundingClientRect(); drag = { dx: e.clientX - r.left, dy: e.clientY - r.top, w: r.width, id: e.pointerId, x0: e.clientX, y0: e.clientY }; moved = false;
+      bar.setPointerCapture(e.pointerId); bar.classList.add('drag');
     });
     bar.addEventListener('pointermove', e => {
       if (!drag || e.pointerId !== drag.id) return;
+      if (Math.abs(e.clientX - drag.x0) + Math.abs(e.clientY - drag.y0) > 4) moved = true; if (!moved) return;
       pos = { x: e.clientX - drag.dx, y: e.clientY - drag.dy, w: drag.w }; place();
     });
-    const end = e => { if (!drag || e.pointerId !== drag.id) return; drag = null; bar.classList.remove('drag'); try { localStorage.setItem(K, JSON.stringify(pos)); } catch (x) { } setSheetH(); };
+    const end = e => { if (!drag || e.pointerId !== drag.id) return; drag = null; bar.classList.remove('drag'); if (moved) { try { localStorage.setItem(K, JSON.stringify(pos)); } catch (x) { } setSheetH(); } };
     bar.addEventListener('pointerup', end); bar.addEventListener('pointercancel', end);
-    bar.addEventListener('dblclick', e => { if (e.target.closest('button,input')) return; pos = null; try { localStorage.removeItem(K); } catch (x) { } reset(); setSheetH(); });
+    bar.addEventListener('click', e => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);   // arrastrar no cuenta como toque
+    bar.addEventListener('dblclick', e => { if (e.target.closest('button,input') || !inHandle(e.target)) return; pos = null; try { localStorage.removeItem(K); } catch (x) { } reset(); setSheetH(); });
     window.addEventListener('resize', place);
     new MutationObserver(place).observe(bar, { attributes: true, attributeFilter: ['hidden'] });
-  })();
+  }
+  makeMovable($('#measureBar'), 'cajas.mb.pos', null);
+  makeMovable($('#nearby'), 'cajas.nb.pos', '.sheet-h');
+  makeMovable($('#detail'), 'cajas.dt.pos', '.d-head');
+  makeMovable($('#pinBar'), 'cajas.pb.pos', '.pb-top');
+  makeMovable($('#roadBar'), 'cajas.rd.pos', null);
 
   /* ---------- agregar / editar ---------- */
   const fc = v => v === '' || v == null ? '' : (isFinite(+v) ? (+v).toFixed(6) : v);
@@ -1129,7 +1142,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.24 · ' + esc((BASES[S.base] || {}).label || 'mapa') + '</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.26 · ' + esc((BASES[S.base] || {}).label || 'mapa') + '</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {
@@ -1157,7 +1170,7 @@
   }
 
   /* ---------- administrador principal · actualizaciones · KMZ subidos ---------- */
-  const APP_VER = '3.24';
+  const APP_VER = '3.26', APP_CODE = 45;   // APP_CODE = versionCode de esta versión (igual que app/build.gradle)
   // Enlaces de Google Drive -> descarga directa
   const driveDirect = u => { u = String(u || '').trim(); const m = u.match(/^https:\/\/(?:drive|docs)\.google\.com\/(?:file\/d\/|open\?(?:[^#]*&)?id=|uc\?(?:[^#]*&)?id=)([A-Za-z0-9_-]{10,})/); return m ? 'https://drive.usercontent.google.com/download?id=' + m[1] + '&export=download&confirm=t' : u; };
   window.__loginInfo = () => {
@@ -1185,7 +1198,7 @@
     if (!Cloud.user() || !NB) return;
     let r; try { r = await Cloud.releaseGet(); } catch (e) { if (manual) toast(Cloud.errText(e), 3500); return; }
     const cur = instCode();
-    if (!r || !(r.code > cur)) { if (manual) { const m = modal('<h3>Estás al día</h3><p class="lead">Versión instalada: ' + esc(instName()) + (r ? ' · última publicada: ' + esc(r.version) : ' · el administrador aún no publicó actualizaciones') + '.</p><button class="btn wide" id="upOk">Cerrar</button>'); m.querySelector('#upOk').onclick = closeModal; } return; }
+    if (!r || !(r.code > cur)) { if (manual) { const m = modal('<h3>Estás al día</h3><p class="lead">Versión instalada: ' + esc(instName()) + (r ? ' (número ' + cur + ') · última publicada: ' + esc(r.version) + ' (número ' + r.code + ')' + (r.code <= cur ? '. Para que se ofrezca, el número publicado debe ser MAYOR que el instalado.' : '') : ' · el administrador aún no publicó actualizaciones') + '.</p><button class="btn wide" id="upOk">Cerrar</button>'); m.querySelector('#upOk').onclick = closeModal; } return; }
     if (!manual && !r.mandatory && relSeen === r.code) return;
     relSeen = r.code; updateModal(r, manual);
   }
@@ -1196,8 +1209,8 @@
     if (!isSuper()) return;
     busy('Consultando…'); let cur = null; try { cur = await Cloud.releaseGet(); } catch (e) { idle(); toast(Cloud.errText(e), 3500); return; } idle();
     const m = modal('<h3>Publicar actualización</h3><p class="lead">' + (cur ? 'Publicada ahora: <b>' + esc(cur.version) + '</b> (código ' + cur.code + ') · ' + fdate(cur.published_at) : 'Todavía no hay ninguna publicada.') + '<br>Al publicar, todas las aplicaciones reciben el aviso en menos de un minuto y se les ofrece descargarla.</p>' +
-      '<label class="field"><span>NOMBRE DE LA VERSIÓN</span><input id="rlV" placeholder="Ej. 3.13" autocomplete="off"></label>' +
-      '<label class="field"><span>NÚMERO DE VERSIÓN (versionCode, debe ser mayor al anterior)</span><input id="rlC" inputmode="numeric" value="' + (cur ? cur.code + 1 : (instCode() || 0) + 1) + '" autocomplete="off"></label>' +
+      '<label class="field"><span>NOMBRE DE LA VERSIÓN</span><input id="rlV" value="' + (cur && cur.code >= APP_CODE ? '' : APP_VER) + '" placeholder="Ej. ' + APP_VER + '" autocomplete="off"></label>' +
+      '<label class="field"><span>NÚMERO DE VERSIÓN (versionCode, debe ser mayor al anterior)</span><input id="rlC" inputmode="numeric" value="' + Math.max(cur ? cur.code + 1 : 0, instCode() ? instCode() + 1 : APP_CODE) + '" autocomplete="off"></label>' +
       '<label class="field"><span>ENLACE DE DESCARGA DEL APK (https://…)</span><input id="rlU" value="' + esc(cur ? cur.url : '') + '" placeholder="Enlace de Google Drive (compartido: cualquiera con el enlace) o https://…/app.apk" autocapitalize="none" spellcheck="false"></label>' +
       '<label class="field"><span>NOTAS (OPCIONAL)</span><textarea id="rlN" placeholder="Qué cambió en esta versión"></textarea></label>' +
       '<button class="opt" id="rlM"><b>Actualización obligatoria</b><span class="sw"></span></button>' +
@@ -1412,7 +1425,7 @@
 
   /* ---------- punto buscado (georreferencia) ---------- */
   function setPin(lat, lon) {
-    deselect(); S.pin = { lat, lon }; S.userMoved = true; S.follow = false; $('#btnLocate').classList.remove('on');
+    deselect(); S.pin = { lat, lon }; S.pinNear = false; S.userMoved = true; S.follow = false; $('#btnLocate').classList.remove('on');
     layout(); renderPin(); map.flyTo(lat, lon, Math.max(map.z, 17.5), 0.35); map.invalidate();
   }
   // Ubicación recibida desde otra app (WhatsApp, Maps…): geo:lat,lon o enlace de mapa
@@ -1430,7 +1443,7 @@
     if (!g) { toast('Ese enlace no trae coordenadas que la app pueda abrir', 4500); return; }
     closeModal(); setPin(g.lat, g.lon); toast('Ubicación recibida', 2500);
   };
-  function clearPin() { S.pin = null; layout(); map.invalidate(); }
+  function clearPin() { S.pin = null; S.pinNear = false; layout(); updateNearby(); map.invalidate(); }
   function renderPin() {
     const p = S.pin; if (!p) return;
     $('#pinCoords').textContent = coordTxt(p.lat, p.lon);
@@ -1439,12 +1452,104 @@
     $('#pinCaja').disabled = !nn;
   }
   $('#pinX').onclick = clearPin;
+  $('#pinList').onclick = () => { S.pinNear = true; nb.dataset.state = 'full'; layout(); updateNearby(); };
   $('#pinWaze').onclick = () => { const p = S.pin; if (p) openExt('waze://?ll=' + p.lat + ',' + p.lon + '&navigate=yes', 'https://waze.com/ul?ll=' + p.lat + ',' + p.lon + '&navigate=yes&zoom=17'); };
   $('#pinCaja').onclick = () => { const nn = S.pin && nearest(S.pin, 1)[0]; if (nn) select(nn[1], true); };
   $('#pinAdd').onclick = () => {
     const p = S.pin; if (!p) return; const nn = nearest(p, 1)[0];
     openForm(null, { n: '', muni: nn && nn[0] < 5000 ? nn[1].g[0] || '' : '', cab: nn && nn[0] < 5000 ? nn[1].g.slice(1).join(' › ') : '', lat: p.lat.toFixed(6), lon: p.lon.toFixed(6), d: '' });
   };
+
+
+  /* ---------- metraje por calles (prueba · solo usuario admin) ---------- */
+  const ROADS_K = 'vz_roads';
+  S.roads = []; try { S.roads = JSON.parse(localStorage.getItem(ROADS_K) || '[]') || []; } catch (e) { }
+  const saveRoads = () => { try { localStorage.setItem(ROADS_K, JSON.stringify(S.roads.slice(-20))); } catch (e) { } };
+  const llOf = p => ({ lat: typeof p.lat === 'function' ? p.lat() : p.lat, lon: typeof p.lng === 'function' ? p.lng() : p.lng });
+  // Pide a Google la ruta por calles (primero la API nueva "Routes"; si no está activa, la clásica "Directions")
+  async function roadRoute(a, b, mode) {
+    const gk = S.gkey || window.CAJAS_GKEY || ''; if (!gk) throw new Error('Falta la clave de Google Maps');
+    await loadGoogle(gk);
+    const errs = [];
+    try {
+      const lib = await google.maps.importLibrary('routes');
+      if (lib && lib.Route && lib.Route.computeRoutes) {
+        const res = await lib.Route.computeRoutes({ origin: { lat: a.lat, lng: a.lon }, destination: { lat: b.lat, lng: b.lon }, travelMode: mode === 'walk' ? 'WALKING' : 'DRIVING', fields: ['path', 'distanceMeters'] });
+        const r = res && res.routes && res.routes[0];
+        if (r && r.path && r.path.length && r.distanceMeters != null) return { dist: r.distanceMeters, pts: r.path.map(p => { const q = llOf(p); return [q.lon, q.lat]; }), via: 'Routes' };
+      }
+    } catch (e) { errs.push('Routes: ' + (e && e.message || e)); DBG('Routes API falló', String(e && e.message || e)); }
+    try {
+      const svc = new google.maps.DirectionsService();
+      const res = await svc.route({ origin: { lat: a.lat, lng: a.lon }, destination: { lat: b.lat, lng: b.lon }, travelMode: mode === 'walk' ? google.maps.TravelMode.WALKING : google.maps.TravelMode.DRIVING });
+      const r = res && res.routes && res.routes[0];
+      if (r && r.legs && r.legs.length) {
+        let dist = 0, pts = [];
+        r.legs.forEach(l => { dist += l.distance ? l.distance.value : 0; (l.steps || []).forEach(s => (s.path || []).forEach(p => { const q = llOf(p); pts.push([q.lon, q.lat]); })); });
+        if (!pts.length && r.overview_path) r.overview_path.forEach(p => { const q = llOf(p); pts.push([q.lon, q.lat]); });
+        if (pts.length) return { dist, pts, via: 'Directions' };
+      }
+    } catch (e) { errs.push('Directions: ' + (e && e.message || e)); DBG('Directions API falló', String(e && e.message || e)); }
+    const err = new Error('Google no pudo calcular la ruta. En tu cuenta de Google Cloud activa “Routes API” (o “Directions API”) para esta clave y que la clave permita ese servicio.'); err.detail = errs.join(' | '); throw err;
+  }
+  async function makeRoad(a, f, mode, replaceId) {
+    if (!isSuper()) return; mode = mode || 'drive';
+    busy('Calculando ruta por calles…');
+    try {
+      const to = { id: f.id, n: f.n, lat: f.c[1], lon: f.c[0] };
+      const r = await roadRoute(a, to, mode); idle();
+      const road = { id: replaceId || ('r' + Date.now()), a: { lat: a.lat, lon: a.lon }, to, mode, dist: r.dist, pts: r.pts, via: r.via };
+      const i = S.roads.findIndex(x => x.id === road.id); if (i >= 0) S.roads[i] = road; else S.roads.push(road);
+      saveRoads(); map.invalidate(); openRoadBar(road);
+      const bb = { minLat: 90, maxLat: -90, minLon: 180, maxLon: -180 }; r.pts.forEach(p => { bb.minLat = Math.min(bb.minLat, p[1]); bb.maxLat = Math.max(bb.maxLat, p[1]); bb.minLon = Math.min(bb.minLon, p[0]); bb.maxLon = Math.max(bb.maxLon, p[0]); });
+      S.userMoved = true; map.fitBounds(bb.minLat, bb.minLon, bb.maxLat, bb.maxLon, 90);
+    } catch (e) { idle(); DBG('ruta por calles FALLÓ', String(e && e.message) + (e && e.detail ? ' · ' + e.detail : '')); toast(e && e.message || 'No se pudo calcular la ruta', 7000); }
+  }
+  var roadSel = null;
+  function openRoadBar(r) {
+    roadSel = r.id; const bar = $('#roadBar');
+    $('#rdDist').textContent = fmtD(r.dist) + ' por calles';
+    const st = hav(r.a.lat, r.a.lon, r.to.lat, r.to.lon);
+    $('#rdSub').textContent = 'Punto buscado → ' + r.to.n + ' · en línea recta ' + fmtD(st);
+    $('#rdDrive').classList.toggle('on', r.mode !== 'walk'); $('#rdWalk').classList.toggle('on', r.mode === 'walk');
+    bar.hidden = false;
+  }
+  function closeRoadBar() { roadSel = null; $('#roadBar').hidden = true; }
+  const curRoad = () => S.roads.find(x => x.id === roadSel);
+  $('#rdX').onclick = closeRoadBar;
+  $('#rdDel').onclick = () => { const r = curRoad(); if (!r) return; S.roads = S.roads.filter(x => x.id !== r.id); saveRoads(); closeRoadBar(); map.invalidate(); toast('Metraje por calles eliminado'); };
+  const rdMode = mode => { const r = curRoad(); if (!r || r.mode === mode) return; const f = S.feats.find(x => x.id === r.to.id); if (f) makeRoad(r.a, f, mode, r.id); };
+  $('#rdDrive').onclick = () => rdMode('drive'); $('#rdWalk').onclick = () => rdMode('walk');
+  $('#rdEdit').onclick = () => {
+    const r = curRoad(); if (!r) return; const list = nearest(r.a, 8);
+    const m = modal('<h3>Otra caja de destino</h3><p class="lead">Elige a qué caja medir por calles desde el punto buscado.</p><div id="rdL"></div><button class="btn wide" id="rdC">Cancelar</button>');
+    m.querySelector('#rdL').innerHTML = list.map(x => '<button class="res" data-id="' + x[1].id + '"><span class="dot ' + kindOf(x[1]) + '"></span><div><b>' + esc(x[1].n) + '</b><small>' + esc(subOf(x[1])) + '</small></div><span class="dist">' + fmtD(x[0]) + '</span></button>').join('');
+    m.querySelector('#rdC').onclick = closeModal;
+    m.querySelector('#rdL').onclick = ev => { const b = ev.target.closest('.res'); if (!b) return; const f = S.feats.find(x => x.id === +b.dataset.id); closeModal(); if (f) makeRoad(r.a, f, r.mode, r.id); };
+  };
+  $('#pinRoad').onclick = () => { const p = S.pin, nn = p && nearest(p, 1)[0]; if (nn) makeRoad(p, nn[1], 'drive'); else toast('No hay cajas cerca de ese punto'); };
+  $('#aRoad').onclick = () => { if (S.pin && S.sel) makeRoad(S.pin, S.sel, 'drive'); };
+  function drawRoads(ctx, m) {
+    let su = false; try { su = isSuper(); } catch (e) { } if (!su || !S.roads || !S.roads.length) return;
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    for (const r of S.roads) {
+      if (!r.pts || r.pts.length < 2) continue;
+      ctx.beginPath(); r.pts.forEach((p, i) => { const [x, y] = m.toScreen(p[1], p[0]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+      ctx.lineWidth = 8; ctx.strokeStyle = 'rgba(8,14,26,.7)'; ctx.stroke(); ctx.lineWidth = 4.5; ctx.strokeStyle = r.id === roadSel ? '#ffd23f' : '#ff9f1c'; ctx.stroke();
+      const mid = r.pts[r.pts.length >> 1], [mx, my] = m.toScreen(mid[1], mid[0]); pill(ctx, fmtD(r.dist), mx, my - 16, '#ff9f1c');
+    }
+  }
+  function hitRoad(px, py) {
+    if (!isSuper()) return null;
+    for (const r of S.roads) {
+      if (!r.pts || r.pts.length < 2) continue;
+      const mid = r.pts[r.pts.length >> 1], [mx, my] = map.toScreen(mid[1], mid[0]);
+      if (Math.abs(px - mx) < 40 && Math.abs(py - (my - 16)) < 16) return r;
+      let prev = null;
+      for (const p of r.pts) { const [x, y] = map.toScreen(p[1], p[0]); if (prev) { const dx = x - prev[0], dy = y - prev[1], L = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((px - prev[0]) * dx + (py - prev[1]) * dy) / L)), qx = prev[0] + t * dx, qy = prev[1] + t * dy; if ((px - qx) * (px - qx) + (py - qy) * (py - qy) < 100) return r; } prev = [x, y]; }
+    }
+    return null;
+  }
 
   /* ---------- evaluaciones técnicas (Excel) ---------- */
   const EV_COLS = ['Nombre del cliente', 'Contacto del cliente', 'Dirección del cliente', 'Ubicación geográfica caja', 'Orden', 'Tipo de orden', 'Código técnico', 'Nombre del técnico'];
