@@ -685,7 +685,7 @@
   function startGpsOnce() { if (!S.gpsStarted) { S.gpsStarted = true; startGps(); } }
 
   /* ---------- cercanas ---------- */
-  const RADII = [[300, '300 m'], [1000, '1 km'], [3000, '3 km'], [10000, '10 km']];
+  const NEAR_R = 160;   // las cajas cercanas se muestran solo dentro de 160 m de la ubicación o del punto buscado
   function refPoint() { if (S.pin) return { lat: S.pin.lat, lon: S.pin.lon, gps: false, pin: true }; if (S.pos) return { lat: S.pos.lat, lon: S.pos.lon, gps: true }; const c = map.center(); return { lat: c.lat, lon: c.lon, gps: false }; }
   function nearest(ref, max, filter) {
     const out = [];
@@ -733,13 +733,12 @@
       return;
     }
     if (!S.pts.length) return;
-    const ref = refPoint(), all = nearest(ref, 60), inR = all.filter(a => a[0] <= S.radius);
-    const rl = (RADII.find(r => r[0] === S.radius) || [0, ''])[1];
-    $('#nbChips').innerHTML = modeChips + RADII.map(r => '<button class="chip' + (r[0] === S.radius ? ' on' : '') + '" data-r="' + r[0] + '">' + r[1] + '</button>').join('');
+    const ref = refPoint(), all = nearest(ref, 60), inR = all.filter(a => a[0] <= NEAR_R);
+    $('#nbChips').innerHTML = modeChips;
     const list = $('#nbList');
-    $('#nbSub').textContent = (inR.length ? inR.length + (inR.length >= 60 ? '+' : '') + ' en ' + rl : 'Ninguna en ' + rl) + (ref.pin ? ' · desde el punto buscado' : ref.gps ? ' · desde tu ubicación' : ' · desde el centro del mapa');
+    $('#nbSub').textContent = (inR.length ? inR.length + (inR.length === 1 ? ' caja' : ' cajas') + ' a menos de ' + NEAR_R + ' m' : 'Ninguna a menos de ' + NEAR_R + ' m') + (ref.pin ? ' · desde el punto buscado' : ref.gps ? ' · desde tu ubicación' : ' · desde el centro del mapa');
     if (inR.length) list.innerHTML = inR.slice(0, 40).map(a => cardHtml(a[1], a[0])).join('');
-    else list.innerHTML = all.slice(0, 3).map(a => cardHtml(a[1], a[0])).join('') || '<div class="empty">No hay cajas cargadas.</div>';
+    else list.innerHTML = all.length ? '<div class="empty" style="width:100%">Ninguna caja a menos de ' + NEAR_R + ' m. La más cercana:</div>' + cardHtml(all[0][1], all[0][0]) : '<div class="empty">No hay cajas cargadas.</div>';
   }
   $('#nbChips').onclick = e => {
     const b = e.target.closest('[data-r]'), mo = e.target.closest('[data-m]'), oa = e.target.closest('[data-oa]');
@@ -840,10 +839,10 @@
   function renderNearBox(f) {
     const box = $('#dNear'); if (!box) return; box.hidden = !S.pin;
     if (!S.pin) return;
-    const list = nearest(S.pin, 12);
+    const list = nearest(S.pin, 80).filter(a => a[0] <= NEAR_R);
     $('#dNearBtn').setAttribute('aria-expanded', dNearOpen ? 'true' : 'false'); $('#dNearList').hidden = !dNearOpen;
-    $('#dNearBtn span').textContent = 'Cajas cercanas al punto buscado (' + list.length + ')';
-    $('#dNearList').innerHTML = list.map(a => '<button class="nrow' + (f && a[1].id === f.id ? ' cur' : '') + '" data-id="' + a[1].id + '"><span class="dot ' + kindOf(a[1]) + '"></span><b>' + esc(a[1].n) + '<br><small>' + esc(subOf(a[1])) + '</small></b><span class="dd2">' + fmtD(a[0]) + '</span></button>').join('');
+    $('#dNearBtn span').textContent = 'Cajas a menos de ' + NEAR_R + ' m del punto buscado (' + list.length + ')';
+    $('#dNearList').innerHTML = !list.length ? '<div class="empty">Ninguna caja a menos de ' + NEAR_R + ' m del punto.</div>' : list.map(a => '<button class="nrow' + (f && a[1].id === f.id ? ' cur' : '') + '" data-id="' + a[1].id + '"><span class="dot ' + kindOf(a[1]) + '"></span><b>' + esc(a[1].n) + '<br><small>' + esc(subOf(a[1])) + '</small></b><span class="dd2">' + fmtD(a[0]) + '</span></button>').join('');
     hydrate(box);
   }
   $('#dNearBtn').onclick = () => { dNearOpen = !dNearOpen; $('#dNearBtn').setAttribute('aria-expanded', dNearOpen ? 'true' : 'false'); $('#dNearList').hidden = !dNearOpen; };
@@ -1153,7 +1152,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.29 · ' + esc((BASES[S.base] || {}).label || 'mapa') + '</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.30 · ' + esc((BASES[S.base] || {}).label || 'mapa') + '</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {
@@ -1181,7 +1180,7 @@
   }
 
   /* ---------- administrador principal · actualizaciones · KMZ subidos ---------- */
-  const APP_VER = '3.29', APP_CODE = 48;   // APP_CODE = versionCode de esta versión (igual que app/build.gradle)
+  const APP_VER = '3.30', APP_CODE = 49;   // APP_CODE = versionCode de esta versión (igual que app/build.gradle)
   // Enlaces de Google Drive -> descarga directa
   const driveDirect = u => { u = String(u || '').trim(); const m = u.match(/^https:\/\/(?:drive|docs)\.google\.com\/(?:file\/d\/|open\?(?:[^#]*&)?id=|uc\?(?:[^#]*&)?id=)([A-Za-z0-9_-]{10,})/); return m ? 'https://drive.usercontent.google.com/download?id=' + m[1] + '&export=download&confirm=t' : u; };
   window.__loginInfo = () => {

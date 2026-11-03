@@ -204,3 +204,6 @@ PASO OBLIGATORIO: ejecutar 7_admin_principal.sql en Supabase (después de 1_ a 6
 
 == v3.29 ==
 - Punto buscado: se quita el boton "Cajas cercanas"; la lista queda como desplegable en el cuadro de la caja.
+
+== v3.30 ==
+- Cajas cercanas (lista y desplegable del punto buscado): solo cajas a menos de 160 m de tu ubicacion o del punto buscado.
