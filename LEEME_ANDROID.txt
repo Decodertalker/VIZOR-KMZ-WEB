@@ -201,3 +201,6 @@ PASO OBLIGATORIO: ejecutar 7_admin_principal.sql en Supabase (después de 1_ a 6
 
 == v3.28 ==
 - Punto buscado: "Cajas cercanas" pasa a la ultima fila (donde estaba el metraje por calles) y sale de la fila de arriba.
+
+== v3.29 ==
+- Punto buscado: se quita el boton "Cajas cercanas"; la lista queda como desplegable en el cuadro de la caja.
