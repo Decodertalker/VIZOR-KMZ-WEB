@@ -1152,7 +1152,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.30 · ' + esc((BASES[S.base] || {}).label || 'mapa') + '</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.31 · ' + esc((BASES[S.base] || {}).label || 'mapa') + '</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {
@@ -1180,7 +1180,7 @@
   }
 
   /* ---------- administrador principal · actualizaciones · KMZ subidos ---------- */
-  const APP_VER = '3.30', APP_CODE = 49;   // APP_CODE = versionCode de esta versión (igual que app/build.gradle)
+  const APP_VER = '3.31', APP_CODE = 50;   // APP_CODE = versionCode de esta versión (igual que app/build.gradle)
   // Enlaces de Google Drive -> descarga directa
   const driveDirect = u => { u = String(u || '').trim(); const m = u.match(/^https:\/\/(?:drive|docs)\.google\.com\/(?:file\/d\/|open\?(?:[^#]*&)?id=|uc\?(?:[^#]*&)?id=)([A-Za-z0-9_-]{10,})/); return m ? 'https://drive.usercontent.google.com/download?id=' + m[1] + '&export=download&confirm=t' : u; };
   window.__loginInfo = () => {
@@ -1191,9 +1191,10 @@
   };
   const isSuper = () => { const u = Cloud.user(); return !!(u && u.role === 'admin' && (u.super || String(u.username || '').toLowerCase() === 'admin')); };
   const instCode = () => { try { return NB && NB.versionCode ? +NB.versionCode() : 0; } catch (e) { return 0; } };
+  const verGt = (a, b) => { const x = String(a || '').match(/\d+/g) || [], y = String(b || '').match(/\d+/g) || []; for (let i = 0; i < Math.max(x.length, y.length); i++) { const p = +x[i] || 0, q = +y[i] || 0; if (p !== q) return p > q; } return false; };
   const instName = () => { try { return NB && NB.versionName ? String(NB.versionName()) : APP_VER; } catch (e) { return APP_VER; } };
   const fdate = t => { try { return new Date(t).toLocaleString('es', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
-  let relSeen = 0;
+  let relSeen = '';
   function updateModal(r, manual) {
     r = Object.assign({}, r, { url: driveDirect(r.url) });
     const m = modal('<h3>Nueva versión ' + esc(r.version) + '</h3><p class="lead">Tienes la ' + esc(instName()) + (r.mandatory ? ' · <b>actualización obligatoria</b>' : '') + '.</p>' +
@@ -1208,9 +1209,10 @@
     if (!Cloud.user() || !NB) return;
     let r; try { r = await Cloud.releaseGet(); } catch (e) { if (manual) toast(Cloud.errText(e), 3500); return; }
     const cur = instCode();
-    if (!r || !(r.code > cur)) { if (manual) { const m = modal('<h3>Estás al día</h3><p class="lead">Versión instalada: ' + esc(instName()) + (r ? ' (número ' + cur + ') · última publicada: ' + esc(r.version) + ' (número ' + r.code + ')' + (r.code <= cur ? '. Para que se ofrezca, el número publicado debe ser MAYOR que el instalado.' : '') : ' · el administrador aún no publicó actualizaciones') + '.</p><button class="btn wide" id="upOk">Cerrar</button>'); m.querySelector('#upOk').onclick = closeModal; } return; }
-    if (!manual && !r.mandatory && relSeen === r.code) return;
-    relSeen = r.code; updateModal(r, manual);
+    if (!r || !(r.code > cur || verGt(r.version, instName()))) { if (manual) { const m = modal('<h3>Estás al día</h3><p class="lead">Versión instalada: ' + esc(instName()) + (r ? ' (número ' + cur + ') · última publicada: ' + esc(r.version) + ' (número ' + r.code + ')' + '' : ' · el administrador aún no publicó actualizaciones') + '.</p><button class="btn wide" id="upOk">Cerrar</button>'); m.querySelector('#upOk').onclick = closeModal; } return; }
+    const rk = r.version + '|' + r.code;
+    if (!manual && !r.mandatory && relSeen === rk) return;
+    relSeen = rk; updateModal(r, manual);
   }
   setTimeout(() => checkRelease(false), 6000);
   setInterval(() => { if (!document.hidden) checkRelease(false); }, 10 * 60 * 1000);
@@ -1220,7 +1222,7 @@
     busy('Consultando…'); let cur = null; try { cur = await Cloud.releaseGet(); } catch (e) { idle(); toast(Cloud.errText(e), 3500); return; } idle();
     const m = modal('<h3>Publicar actualización</h3><p class="lead">' + (cur ? 'Publicada ahora: <b>' + esc(cur.version) + '</b> (código ' + cur.code + ') · ' + fdate(cur.published_at) : 'Todavía no hay ninguna publicada.') + '<br>Al publicar, todas las aplicaciones reciben el aviso en menos de un minuto y se les ofrece descargarla.</p>' +
       '<label class="field"><span>NOMBRE DE LA VERSIÓN</span><input id="rlV" value="' + (cur && cur.code >= APP_CODE ? '' : APP_VER) + '" placeholder="Ej. ' + APP_VER + '" autocomplete="off"></label>' +
-      '<label class="field"><span>NÚMERO DE VERSIÓN (versionCode, debe ser mayor al anterior)</span><input id="rlC" inputmode="numeric" value="' + Math.max(cur ? cur.code + 1 : 0, instCode() ? instCode() + 1 : APP_CODE) + '" autocomplete="off"></label>' +
+      '<label class="field"><span>NÚMERO DE VERSIÓN (versionCode; Android exige que el APK tenga un número mayor al instalado)</span><input id="rlC" inputmode="numeric" value="' + Math.max(cur ? cur.code + 1 : 0, instCode() ? instCode() + 1 : APP_CODE) + '" autocomplete="off"></label>' +
       '<label class="field"><span>ENLACE DE DESCARGA DEL APK (https://…)</span><input id="rlU" value="' + esc(cur ? cur.url : '') + '" placeholder="Enlace de Google Drive (compartido: cualquiera con el enlace) o https://…/app.apk" autocapitalize="none" spellcheck="false"></label>' +
       '<label class="field"><span>NOTAS (OPCIONAL)</span><textarea id="rlN" placeholder="Qué cambió en esta versión"></textarea></label>' +
       '<button class="opt" id="rlM"><b>Actualización obligatoria</b><span class="sw"></span></button>' +
@@ -1231,7 +1233,7 @@
     q('#rlS').onclick = async () => {
       const v = q('#rlV').value.trim(), c = parseInt(q('#rlC').value, 10), u = driveDirect(q('#rlU').value.trim());
       if (!v) { toast('Escribe el nombre de la versión'); return; } if (!(c > 0)) { toast('El número de versión debe ser mayor que 0'); return; } if (!/^https:\/\//.test(u)) { toast('El enlace debe empezar con https://'); return; }
-      if (cur && c <= cur.code && !(await confirmBox('El número no es mayor al anterior', 'Las aplicaciones solo se actualizan si el número es MAYOR que el que tienen instalado. ¿Publicar de todos modos?', 'Publicar'))) return;
+      if (cur && c <= cur.code && !verGt(v, cur.version) && !(await confirmBox('La versión no es mayor a la anterior', 'Se ofrece a quien tenga instalada una versión menor (por nombre o número). ¿Publicar de todos modos?', 'Publicar'))) return;
       busy('Publicando…'); try { await Cloud.releasePublish(v, c, u, q('#rlN').value.trim(), mand); idle(); closeModal(); toast('Publicada la versión ' + v + '. Las aplicaciones recibirán el aviso', 4500); } catch (e) { idle(); toast(Cloud.errText(e), 4500); }
     };
   }

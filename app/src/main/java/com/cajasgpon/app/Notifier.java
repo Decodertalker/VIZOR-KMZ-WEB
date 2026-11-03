@@ -93,6 +93,27 @@ final class Notifier {
     }
 
     /** Revisa si el administrador principal publicó una versión más nueva y avisa una sola vez por versión. */
+    static String versionName(Context c) {
+        try {
+            String v = c.getPackageManager().getPackageInfo(c.getPackageName(), 0).versionName;
+            return v == null ? "" : v;
+        } catch (Throwable t) {
+            return "";
+        }
+    }
+
+    static boolean verGt(String a, String b) {
+        String[] x = a.replaceAll("[^0-9.]", "").split("\\.");
+        String[] y = b.replaceAll("[^0-9.]", "").split("\\.");
+        for (int i = 0; i < Math.max(x.length, y.length); i++) {
+            int p = 0, q = 0;
+            try { p = i < x.length ? Integer.parseInt(x[i]) : 0; } catch (Exception e) { }
+            try { q = i < y.length ? Integer.parseInt(y[i]) : 0; } catch (Exception e) { }
+            if (p != q) return p > q;
+        }
+        return false;
+    }
+
     static void checkRelease(Context c, boolean notify) {
         SharedPreferences p = prefs(c);
         String url = p.getString("url", ""), key = p.getString("key", ""), token = p.getString("token", "");
@@ -102,8 +123,10 @@ final class Notifier {
             if (res.length() == 0 || res.equals("null")) return;
             JSONObject o = new JSONObject(res);
             int code = o.optInt("code", 0);
-            if (notify && code > versionCode(c) && code != p.getInt("relNote", 0)) {
-                p.edit().putInt("relNote", code).apply();
+            String ver = o.optString("version", "");
+            String key2 = ver + "|" + code;
+            if (notify && (code > versionCode(c) || verGt(ver, versionName(c))) && !key2.equals(p.getString("relNoteK", ""))) {
+                p.edit().putString("relNoteK", key2).apply();
                 {
                     String notes = o.optString("notes", "");
                     showUpdate(c, "Nueva versión " + o.optString("version", "") + " disponible", notes.length() > 0 ? notes : "Toca para descargarla e instalarla.");
