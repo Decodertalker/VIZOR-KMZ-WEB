@@ -193,3 +193,8 @@ PASO OBLIGATORIO: ejecutar 7_admin_principal.sql en Supabase (después de 1_ a 6
 - Con un punto buscado (georeferencia): "Cajas cercanas" y la distancia del detalle se miden desde ese punto, no desde tu ubicacion.
 - Los cuadros (cajas cercanas, detalle, punto buscado, metraje) se pueden mover en la web; doble clic en el encabezado para volver.
 - PRUEBA (solo usuario admin): metraje por calles con Google (Routes/Directions API) desde el punto buscado a la caja mas cercana; se puede cambiar de caja, auto/a pie y eliminar.
+
+== v3.27 ==
+- Se quita el metraje por calles de prueba.
+- Punto buscado: ya no hay boton "Cajas cercanas"; el detalle de la caja trae un desplegable con las cajas cercanas al punto.
+- La linea azul y el Metraje van desde el punto buscado (si no hay punto, desde tu ubicacion).

@@ -73,7 +73,10 @@
         <button class="btn ghost" id="aShare"><i data-i="share"></i><span>Enviar</span></button>
         <button class="btn ghost" id="aEdit"><i data-i="edit"></i><span>Editar</span></button>
       </div>
-      <button class="btn wide" id="aRoad" hidden style="margin:0 0 10px"><i data-i="ruler"></i>Metraje por calles desde el punto buscado (prueba)</button>
+      <div id="dNear" hidden>
+        <button class="btn wide ghost" id="dNearBtn" aria-expanded="false"><span>Cajas cercanas al punto buscado</span><i data-i="chev"></i></button>
+        <div id="dNearList" hidden></div>
+      </div>
       <dl class="d-info" id="dInfo"></dl>
     </div>
   </section>
@@ -86,10 +89,8 @@
     <div class="pb-btns">
       <button class="btn waze small" id="pinWaze"><i data-i="nav"></i>Waze</button>
       <button class="btn small" id="pinCaja"><i data-i="box"></i>Caja cercana</button>
-      <button class="btn small" id="pinList"><i data-i="map"></i>Cajas cercanas</button>
       <button class="btn small accent" id="pinAdd"><i data-i="plus"></i>Caja aquí</button>
     </div>
-    <div class="pb-btns" id="pinRoadRow" hidden><button class="btn small" id="pinRoad"><i data-i="ruler"></i>Metraje por calles a la caja más cercana <em style="font-style:normal;opacity:.7">(prueba)</em></button></div>
   </div>
 
   <div id="measureBar" class="glass" hidden>
@@ -103,13 +104,6 @@
       <button class="btn ghost small" id="mClear"><i data-i="trash"></i></button>
       <button class="btn small accent" id="mDone"><i data-i="check"></i>Listo</button>
     </div>
-  </div>
-
-  <div id="roadBar" class="glass" hidden>
-    <div class="mhead"><span class="rdGrip">⠿</span><div style="flex:1"><small id="rdSub">Metraje por calles</small><b id="rdDist">—</b></div><button class="icon-btn small" id="rdX" aria-label="Cerrar"><i data-i="x"></i></button></div>
-    <div class="rdChips"><button class="chip on" id="rdDrive">En auto</button><button class="chip" id="rdWalk">A pie</button></div>
-    <div class="mb-btns"><button class="btn small" id="rdEdit"><i data-i="edit"></i>Otra caja</button><button class="btn small ghost" id="rdDel"><i data-i="trash"></i>Eliminar</button></div>
-    <p class="rdNote">Solo prueba · distancia por las calles que usa Google Maps</p>
   </div>
 
   <div id="pickLayer" hidden>
