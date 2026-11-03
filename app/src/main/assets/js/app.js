@@ -735,7 +735,7 @@
     if (!S.pts.length) return;
     const ref = refPoint(), all = nearest(ref, 60), inR = all.filter(a => a[0] <= S.radius);
     const rl = (RADII.find(r => r[0] === S.radius) || [0, ''])[1];
-    $('#nbChips').innerHTML = modeChips + RADII.map(r => '<button class="chip' + (r[0] === S.radius ? ' on' : '') + '" data-r="' + r[0] + '">' + r[1] + '</button>').join('');
+    $('#nbChips').innerHTML = (S.pin ? '<button class="chip on" data-pb="1">← Punto buscado</button>' : '') + modeChips + RADII.map(r => '<button class="chip' + (r[0] === S.radius ? ' on' : '') + '" data-r="' + r[0] + '">' + r[1] + '</button>').join('');
     const list = $('#nbList');
     $('#nbSub').textContent = (inR.length ? inR.length + (inR.length >= 60 ? '+' : '') + ' en ' + rl : 'Ninguna en ' + rl) + (ref.pin ? ' · desde el punto buscado' : ref.gps ? ' · desde tu ubicación' : ' · desde el centro del mapa');
     if (inR.length) list.innerHTML = inR.slice(0, 40).map(a => cardHtml(a[1], a[0])).join('');
@@ -743,6 +743,7 @@
   }
   $('#nbChips').onclick = e => {
     const b = e.target.closest('[data-r]'), mo = e.target.closest('[data-m]'), oa = e.target.closest('[data-oa]');
+    if (e.target.closest('[data-pb]')) { S.pinNear = false; layout(); return; }
     if (b) { S.radius = +b.dataset.r; saveSettings(); updateNearby(); }
     if (mo) { S.nbMode = mo.dataset.m; saveSettings(); updateNearby(); }
     if (oa) { S.autoOrd = !autoOrdOn(); _ord.t = 0; saveSettings(); updateNearby(); map.invalidate(); }
@@ -805,15 +806,15 @@
   /* ---------- hojas ---------- */
   function setSheetH() {
     let el = null;
-    if (S.pick) el = $('#pickBar'); else if (S.meas.on) el = $('#measureBar'); else el = S.sel ? $('#detail') : S.pin ? $('#pinBar') : $('#nearby');
+    if (S.pick) el = $('#pickBar'); else if (S.meas.on) el = $('#measureBar'); else el = S.sel ? $('#detail') : (S.pin && !S.pinNear) ? $('#pinBar') : $('#nearby');
     let h = el && !el.hidden ? el.offsetHeight + (el.id === 'detail' || el.id === 'nearby' ? 0 : 14) : 0;
     if (el && el.style.top) h = 0;  // si el cuadro está movido, no empuja los botones del mapa
     document.documentElement.style.setProperty('--sheet-h', Math.max(h, 0) + 'px');
   }
   function layout() {
     const meas = S.meas.on, pick = !!S.pick;
-    $('#nearby').hidden = !!S.sel || meas || pick || !!S.pin;
-    $('#pinBar').hidden = !S.pin || !!S.sel || meas || pick;
+    $('#nearby').hidden = !!S.sel || meas || pick || (!!S.pin && !S.pinNear);
+    $('#pinBar').hidden = !S.pin || !!S.sel || meas || pick || !!S.pinNear;
     const dn = $('#dNear'); if (dn) dn.hidden = !(S.pin && S.sel);
     $('#detail').hidden = !S.sel || meas || pick;
     $('#measureBar').hidden = !meas; $('#pickLayer').hidden = !pick;
@@ -1153,7 +1154,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.27 · ' + esc((BASES[S.base] || {}).label || 'mapa') + '</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.28 · ' + esc((BASES[S.base] || {}).label || 'mapa') + '</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {
@@ -1181,7 +1182,7 @@
   }
 
   /* ---------- administrador principal · actualizaciones · KMZ subidos ---------- */
-  const APP_VER = '3.27', APP_CODE = 46;   // APP_CODE = versionCode de esta versión (igual que app/build.gradle)
+  const APP_VER = '3.28', APP_CODE = 47;   // APP_CODE = versionCode de esta versión (igual que app/build.gradle)
   // Enlaces de Google Drive -> descarga directa
   const driveDirect = u => { u = String(u || '').trim(); const m = u.match(/^https:\/\/(?:drive|docs)\.google\.com\/(?:file\/d\/|open\?(?:[^#]*&)?id=|uc\?(?:[^#]*&)?id=)([A-Za-z0-9_-]{10,})/); return m ? 'https://drive.usercontent.google.com/download?id=' + m[1] + '&export=download&confirm=t' : u; };
   window.__loginInfo = () => {
@@ -1436,7 +1437,7 @@
 
   /* ---------- punto buscado (georreferencia) ---------- */
   function setPin(lat, lon) {
-    deselect(); S.pin = { lat, lon }; S.userMoved = true; S.follow = false; $('#btnLocate').classList.remove('on');
+    deselect(); S.pin = { lat, lon }; S.pinNear = false; S.userMoved = true; S.follow = false; $('#btnLocate').classList.remove('on');
     layout(); renderPin(); map.flyTo(lat, lon, Math.max(map.z, 17.5), 0.35); map.invalidate();
   }
   // Ubicación recibida desde otra app (WhatsApp, Maps…): geo:lat,lon o enlace de mapa
@@ -1454,7 +1455,7 @@
     if (!g) { toast('Ese enlace no trae coordenadas que la app pueda abrir', 4500); return; }
     closeModal(); setPin(g.lat, g.lon); toast('Ubicación recibida', 2500);
   };
-  function clearPin() { S.pin = null; layout(); updateNearby(); map.invalidate(); if (S.sel) renderDetail(); }
+  function clearPin() { S.pin = null; S.pinNear = false; layout(); updateNearby(); map.invalidate(); if (S.sel) renderDetail(); }
   function renderPin() {
     const p = S.pin; if (!p) return;
     $('#pinCoords').textContent = coordTxt(p.lat, p.lon);
@@ -1463,6 +1464,7 @@
     $('#pinCaja').disabled = !nn;
   }
   $('#pinX').onclick = clearPin;
+  $('#pinList').onclick = () => { S.pinNear = true; nb.dataset.state = 'full'; layout(); updateNearby(); };
   $('#pinWaze').onclick = () => { const p = S.pin; if (p) openExt('waze://?ll=' + p.lat + ',' + p.lon + '&navigate=yes', 'https://waze.com/ul?ll=' + p.lat + ',' + p.lon + '&navigate=yes&zoom=17'); };
   $('#pinCaja').onclick = () => { const nn = S.pin && nearest(S.pin, 1)[0]; if (nn) select(nn[1], true); };
   $('#pinAdd').onclick = () => {

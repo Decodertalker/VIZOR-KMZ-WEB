@@ -198,3 +198,6 @@ PASO OBLIGATORIO: ejecutar 7_admin_principal.sql en Supabase (después de 1_ a 6
 - Se quita el metraje por calles de prueba.
 - Punto buscado: ya no hay boton "Cajas cercanas"; el detalle de la caja trae un desplegable con las cajas cercanas al punto.
 - La linea azul y el Metraje van desde el punto buscado (si no hay punto, desde tu ubicacion).
+
+== v3.28 ==
+- Punto buscado: "Cajas cercanas" pasa a la ultima fila (donde estaba el metraje por calles) y sale de la fila de arriba.
