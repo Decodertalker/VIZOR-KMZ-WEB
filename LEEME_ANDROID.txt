@@ -219,3 +219,5 @@ v3.33 - Selección múltiple, distritos, archivos y clic derecho
  - Asignaciones: casillas en la ruta (quitar varias o moverlas a otro técnico), sin asignar agrupado por archivo / distrito / sin agrupar, marcar un grupo completo, botón "Por distrito" para ordenar la ruta, y papelera por archivo para eliminarlo del sistema.
  - Evaluaciones técnicas (admin): panel "Archivos cargados" con detalle, filtro por archivo y eliminar archivo.
  - Mapa: clic derecho (o mantener pulsado en el teléfono) abre menú: cajas cercanas a ese punto, copiar coordenadas/enlace, Google Maps, Waze, medir, agregar caja (admin), y acciones sobre una caja o evaluación.
+
+v3.34 - Clic derecho más robusto: se captura sobre todo el mapa (también con Google en modo compatible o vectorial) y ya no se ignora en el primer segundo tras abrir la página.

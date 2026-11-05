@@ -111,7 +111,6 @@
           if (performance.now() > this._hold) { if (this.onUserMove) this.onUserMove(); if (!this.gOwn) this._zoomHide(true); }   // Google anima su zoom por dentro: mientras dura, los datos no se dibujan para que no "naden" fuera de su sitio
         });
         gm.addListener('idle', () => { dbg('evt idle', { gz: f4(gm.getZoom()), z: f4(this.z), zh: !!this._zh }); if (this._zh) { this._hold = 0; this._poll(); this._zoomHide(false); } });
-        gm.addListener('rightclick', e => { if (this.gOwn || !e.latLng || !this.onContext) return; const p = this.toScreen(e.latLng.lat(), e.latLng.lng()), de = e.domEvent || {}; this.onContext(p[0], p[1], de.clientX != null ? de.clientX : innerWidth / 2, de.clientY != null ? de.clientY : innerHeight / 2); });
         gm.addListener('click', e => { if (this.gOwn || !e.latLng || !this.onTap) return; const p = this.toScreen(e.latLng.lat(), e.latLng.lng()); this.onTap(p[0], p[1]); });
         if (!this._loopOn) { this._loopOn = 1; const loop = () => { this._poll(); requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
       }
@@ -459,7 +458,7 @@
         if (P.size < 2) pinch = null;
       };
       cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
-      cv.addEventListener('contextmenu', e => { e.preventDefault(); if (performance.now() - (this._lpAt || 0) < 1500 || !this.onContext) return; const q = U(pos(e)); this.onContext(q.x, q.y, e.clientX, e.clientY); });
+      (cv.parentElement || cv).addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); if ((this._lpAt && performance.now() - this._lpAt < 1500) || !this.onContext) return; const q = U(pos(e)); this.onContext(q.x, q.y, e.clientX, e.clientY); }, true);
       cv.addEventListener('wheel', e => {
         e.preventDefault(); const p = pos(e);
         this.onUserMove && this.onUserMove();
