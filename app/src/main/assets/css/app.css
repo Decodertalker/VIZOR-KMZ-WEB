@@ -297,3 +297,14 @@ select.sel{width:100%;height:48px;border-radius:13px;border:1px solid var(--line
 #dNearBtn{flex-direction:row!important;justify-content:space-between;min-height:46px;padding:0 14px}
 #dNearBtn span{flex:1;text-align:left}
 #pinBar #pinAdd{flex:1 1 100%;order:3}#pinBar .pb-btns:first-of-type{flex-wrap:wrap}
+
+/* menú de clic derecho / pulsación larga */
+#ctxMenu{position:fixed;z-index:60;min-width:230px;max-width:min(300px,92vw);background:var(--solid);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:6px;animation:ctxIn .12s ease-out}
+@keyframes ctxIn{from{opacity:0;transform:scale(.96)}}
+#ctxMenu .cm-h{padding:8px 10px 8px;font-weight:700;font-size:13.5px;border-bottom:1px solid var(--line);margin-bottom:4px;word-break:break-word}
+#ctxMenu .cm-h small{display:block;font-weight:500;color:var(--muted);font-size:12px;margin-top:2px}
+#ctxMenu button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:9px 10px;border-radius:10px;font-size:14px;color:var(--text);background:none;border:0;cursor:pointer}
+#ctxMenu button:hover,#ctxMenu button:focus-visible{background:var(--solid2);outline:0}
+#ctxMenu button svg{width:18px;height:18px;flex:none;color:var(--muted)}
+#ctxMenu button.danger,#ctxMenu button.danger svg{color:#f87171}
+#ctxMenu button i{display:grid;flex:none}

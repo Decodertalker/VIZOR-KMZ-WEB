@@ -607,6 +607,44 @@
     const h = hitPoint(px, py);
     if (h) select(h, true, true); else if (S.sel) deselect();
   };
+  /* ---------- clic derecho (o pulsación larga) en el mapa ---------- */
+  let ctxEl = null;
+  function closeCtx() { if (ctxEl) { ctxEl.remove(); ctxEl = null; } }
+  ['pointerdown', 'wheel', 'keydown', 'blur', 'resize'].forEach(t => window.addEventListener(t, ev => { if (ctxEl && !(ev.target && ev.target.closest && ev.target.closest('#ctxMenu')) && !(t === 'keydown' && ev.key !== 'Escape')) closeCtx(); }, true));
+  map.onContext = (px, py, cx, cy) => {
+    closeCtx(); if (S.pick || $('#modalRoot').firstChild) return;
+    const ll = map.fromScreen(px, py), f = S.meas.on ? null : hitPoint(px, py), ev = f || S.meas.on ? null : hitEval(px, py), adm = isAdmin();
+    const lat = f ? f.c[1] : ll.lat, lon = f ? f.c[0] : ll.lon, ct = coordTxt(lat, lon);
+    const gUrl = 'https://www.google.com/maps/search/?api=1&query=' + lat.toFixed(6) + ',' + lon.toFixed(6);
+    const near = () => { setPin(lat, lon); setTimeout(() => { const n = nearest(S.pin, 400).filter(x => x[0] <= NEAR_R).length; toast(n ? n + (n === 1 ? ' caja' : ' cajas') + ' a menos de ' + NEAR_R + ' m de este punto' : 'No hay cajas a menos de ' + NEAR_R + ' m de este punto', 3500); }, 80); };
+    const items = [];
+    if (f) {
+      items.push(['pin', 'Abrir ' + f.n, () => select(f, true, true)]);
+      items.push(['copy', 'Copiar nombre de la caja', async () => { toast(await copyText(f.n) ? 'Nombre copiado' : 'No se pudo copiar'); }]);
+      items.push(['ruler', 'Medir desde esta caja', () => startMeasure(f)]);
+    }
+    if (ev) {
+      items.push(['clip', 'Abrir evaluación · ' + (ev.cliente || ev.orden || ''), () => openEvalDetail(ev)]);
+      if (adm && !ev.asg) items.push(['team', 'Asignar a un técnico…', () => openAssign(ev)]);
+    }
+    items.push(['search', 'Cajas cercanas a este punto', near]);
+    items.push(['copy', 'Copiar coordenadas', async () => { toast(await copyText(lat.toFixed(6) + ', ' + lon.toFixed(6)) ? 'Coordenadas copiadas' : 'No se pudo copiar'); }]);
+    items.push(['share', 'Copiar enlace de Google Maps', async () => { toast(await copyText(gUrl) ? 'Enlace copiado' : 'No se pudo copiar'); }]);
+    items.push(['map', 'Abrir en Google Maps', () => openExt('geo:' + lat.toFixed(6) + ',' + lon.toFixed(6) + '?q=' + lat.toFixed(6) + ',' + lon.toFixed(6), gUrl)]);
+    items.push(['nav', 'Ir con Waze', () => openExt('waze://?ll=' + lat + ',' + lon + '&navigate=yes', 'https://waze.com/ul?ll=' + lat + ',' + lon + '&navigate=yes&zoom=17')]);
+    if (!f) items.push(['ruler', S.meas.on ? 'Medir: sumar este punto' : 'Medir desde aquí', () => { if (!S.meas.on) startMeasure(null); S.meas.pts.push([lon, lat]); updateMeasure(); }]);
+    if (!f && adm) items.push(['plus', 'Agregar caja aquí', () => { const nn = nearest({ lat, lon }, 1)[0]; openForm(null, { n: '', muni: nn && nn[0] < 5000 ? nn[1].g[0] || '' : '', cab: nn && nn[0] < 5000 ? nn[1].g.slice(1).join(' › ') : '', lat: lat.toFixed(6), lon: lon.toFixed(6), d: '' }); }]);
+    if (adm && f) items.push(['trash', 'Eliminar esta caja', async () => { if (await confirmBox('¿Eliminar ' + f.n + '?', 'Se quitará también en la web y en los teléfonos.', 'Eliminar', true)) { await removeFeats([f]); deselect(); toast('Caja eliminada'); } }, true]);
+    if (S.pin) items.push(['x', 'Quitar el marcador', clearPin]);
+    const el = document.createElement('div'); el.id = 'ctxMenu';
+    const dg = S.pos ? ' · a ' + fmtD(hav(S.pos.lat, S.pos.lon, lat, lon)).replace(/<[^>]*>/g, '') : '';
+    el.innerHTML = '<div class="cm-h">' + esc(f ? f.n : ct) + '<small>' + esc(f ? ct : 'Este punto del mapa') + esc(dg) + '</small></div>' + items.map((it, i) => '<button data-i="' + i + '"' + (it[3] ? ' class="danger"' : '') + '>' + ic(it[0]) + '<span>' + esc(it[1]) + '</span></button>').join('');
+    document.body.appendChild(el); hydrate(el); ctxEl = el;
+    const W = innerWidth, H = innerHeight, r = el.getBoundingClientRect();
+    el.style.left = Math.max(8, Math.min(cx, W - r.width - 8)) + 'px'; el.style.top = Math.max(8, Math.min(cy, H - r.height - 8)) + 'px';
+    el.onclick = e2 => { const b = e2.target.closest('[data-i]'); if (!b) return; const it = items[+b.dataset.i]; closeCtx(); it[2](); };
+    el.oncontextmenu = e2 => e2.preventDefault();
+  };
   const btnN = $('#btnNorth');
   map.onRot = r => { const on = Math.abs(r) > 0.012; if (btnN.hidden === on) btnN.hidden = !on; const ic0 = btnN.firstElementChild; if (ic0) ic0.style.transform = 'rotate(' + (-r) + 'rad)'; };
   btnN.onclick = () => map.resetNorth();
@@ -1152,7 +1190,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.31 · ' + esc((BASES[S.base] || {}).label || 'mapa') + '</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.33 · ' + esc((BASES[S.base] || {}).label || 'mapa') + '</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {
@@ -1180,7 +1218,7 @@
   }
 
   /* ---------- administrador principal · actualizaciones · KMZ subidos ---------- */
-  const APP_VER = '3.31', APP_CODE = 50;   // APP_CODE = versionCode de esta versión (igual que app/build.gradle)
+  const APP_VER = '3.33', APP_CODE = 52;   // APP_CODE = versionCode de esta versión (igual que app/build.gradle)
   // Enlaces de Google Drive -> descarga directa
   const driveDirect = u => { u = String(u || '').trim(); const m = u.match(/^https:\/\/(?:drive|docs)\.google\.com\/(?:file\/d\/|open\?(?:[^#]*&)?id=|uc\?(?:[^#]*&)?id=)([A-Za-z0-9_-]{10,})/); return m ? 'https://drive.usercontent.google.com/download?id=' + m[1] + '&export=download&confirm=t' : u; };
   window.__loginInfo = () => {
@@ -1192,6 +1230,7 @@
   const isSuper = () => { const u = Cloud.user(); return !!(u && u.role === 'admin' && (u.super || String(u.username || '').toLowerCase() === 'admin')); };
   const instCode = () => { try { return NB && NB.versionCode ? +NB.versionCode() : 0; } catch (e) { return 0; } };
   const verGt = (a, b) => { const x = String(a || '').match(/\d+/g) || [], y = String(b || '').match(/\d+/g) || []; for (let i = 0; i < Math.max(x.length, y.length); i++) { const p = +x[i] || 0, q = +y[i] || 0; if (p !== q) return p > q; } return false; };
+  const isNewer = r => verGt(r.version, instName()) || (!verGt(instName(), r.version) && r.code > instCode());
   const instName = () => { try { return NB && NB.versionName ? String(NB.versionName()) : APP_VER; } catch (e) { return APP_VER; } };
   const fdate = t => { try { return new Date(t).toLocaleString('es', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
   let relSeen = '';
@@ -1209,7 +1248,7 @@
     if (!Cloud.user() || !NB) return;
     let r; try { r = await Cloud.releaseGet(); } catch (e) { if (manual) toast(Cloud.errText(e), 3500); return; }
     const cur = instCode();
-    if (!r || !(r.code > cur || verGt(r.version, instName()))) { if (manual) { const m = modal('<h3>Estás al día</h3><p class="lead">Versión instalada: ' + esc(instName()) + (r ? ' (número ' + cur + ') · última publicada: ' + esc(r.version) + ' (número ' + r.code + ')' + '' : ' · el administrador aún no publicó actualizaciones') + '.</p><button class="btn wide" id="upOk">Cerrar</button>'); m.querySelector('#upOk').onclick = closeModal; } return; }
+    if (!r || !isNewer(r)) { if (manual) { const m = modal('<h3>Estás al día</h3><p class="lead">Versión instalada: ' + esc(instName()) + (r ? ' (número ' + cur + ') · última publicada: ' + esc(r.version) + ' (número ' + r.code + ')' + '' : ' · el administrador aún no publicó actualizaciones') + '.</p><button class="btn wide" id="upOk">Cerrar</button>'); m.querySelector('#upOk').onclick = closeModal; } return; }
     const rk = r.version + '|' + r.code;
     if (!manual && !r.mandatory && relSeen === rk) return;
     relSeen = rk; updateModal(r, manual);
@@ -1241,6 +1280,17 @@
   function srcGroups() {
     const g = new Map(); S.feats.forEach(f => { const k = f.src || 'Sin origen'; const o = g.get(k) || { p: 0, a: 0, l: 0 }; o[f.t]++; g.set(k, o); }); return g;
   }
+  /* distritos: NI001/002-JUAN0108 pertenece a JUAN0108 solo si existe una caja llamada JUAN0108 */
+  const distSuffix = n => { const m = String(n || '').match(/-\s*([A-Za-z0-9]+)\s*$/); return m ? m[1].toUpperCase() : ''; };
+  const headSet = () => { const h = new Set(); S.pts.forEach(p => h.add(norm(p.n))); return h; };
+  function groupDist(list, nameOf, heads) {
+    const g = new Map(), rest = [];
+    list.forEach(x => { const d = distSuffix(nameOf(x)); if (d && heads.has(d)) { if (!g.has(d)) g.set(d, []); g.get(d).push(x); } else rest.push(x); });
+    const rest2 = rest.filter(x => { const k = norm(nameOf(x)); if (k && g.has(k)) { g.get(k).unshift(x); return false; } return true; });
+    return { groups: Array.from(g).sort((a, b) => a[0] < b[0] ? -1 : 1), rest: rest2 };
+  }
+  const checkAttr = (on) => on ? ' checked' : '';
+  const CK = 'style="width:20px;height:20px;accent-color:var(--accent);flex:none"';
   async function openKmzLog() {
     if (!isSuper()) return;
     busy('Cargando historial…'); let log = []; try { log = await Cloud.uploadsList(); } catch (e) { log = null; } idle();
@@ -1261,26 +1311,67 @@
       if (d) { const k = d.dataset.src, list = S.feats.filter(f => (f.src || 'Sin origen') === k); if (await confirmBox('¿Eliminar “' + k + '”?', 'Se borrarán ' + list.length.toLocaleString('es') + ' elementos de este archivo, también en la web y en los teléfonos. No se puede deshacer.', 'Eliminar todo', true)) { busy('Eliminando…'); await new Promise(r => setTimeout(r, 30)); await removeFeats(list); idle(); toast('Eliminado: ' + list.length + ' elementos'); openKmzLog(); } }
     };
   }
-  function openKmzDetail(k, tab, q0) {
-    tab = tab || 'p'; q0 = q0 || '';
-    const all = S.feats.filter(f => (f.src || 'Sin origen') === k), cnt = { p: 0, a: 0, l: 0 }; all.forEach(f => cnt[f.t]++);
-    const t = norm(q0), list = all.filter(f => f.t === tab && (!t || norm(f.n).includes(t)));
+  function openKmzDetail(k, keep) {
+    const st = keep || { tab: 'p', q: '', sel: new Set(), grp: true, open: new Set(), heads: headSet() };
     const lab = { p: 'Cajas', a: 'Áreas', l: 'Rutas' };
-    const m = modal('<h3>' + esc(k) + '</h3><div class="chips" id="kdT">' + ['p', 'a', 'l'].map(x => '<button class="chip' + (x === tab ? ' on' : '') + '" data-t="' + x + '">' + lab[x] + ' · ' + cnt[x].toLocaleString('es') + '</button>').join('') + '</div>' +
-      '<input class="evsearch" id="kdQ" placeholder="Buscar por nombre…" autocomplete="off" value="' + esc(q0) + '"><p class="lead" style="margin:6px 0">' + list.length.toLocaleString('es') + ' resultados' + (list.length > 80 ? ' · mostrando 80' : '') + '</p><div id="kdL"></div>' +
-      '<div class="btnrow" style="margin-top:10px"><button class="btn" id="kdB">Volver</button>' + (list.length ? '<button class="btn danger" id="kdAll">' + ic('trash') + 'Eliminar estos ' + list.length.toLocaleString('es') + '</button>' : '') + '</div>');
-    hydrate(m);
-    m.querySelector('#kdL').innerHTML = list.slice(0, 80).map(f => '<div class="urow"><div class="meta"><b>' + esc(f.n) + '</b><small>' + esc(subOf(f)) + '</small></div>' + (f.t === 'p' ? '<button class="btn small" data-v="' + f.id + '">' + ic('pin') + '</button>' : '') + '<button class="btn small danger" data-d="' + f.id + '">' + ic('trash') + '</button></div>').join('');
-    hydrate(m.querySelector('#kdL'));
-    m.querySelector('#kdT').onclick = ev => { const b = ev.target.closest('[data-t]'); if (b) openKmzDetail(k, b.dataset.t, ''); };
-    let tm = 0; m.querySelector('#kdQ').oninput = ev => { clearTimeout(tm); const v = ev.target.value; tm = setTimeout(() => { openKmzDetail(k, tab, v); const i = document.querySelector('#kdQ'); if (i) { i.focus(); i.setSelectionRange(v.length, v.length); } }, 450); };
-    m.querySelector('#kdB').onclick = () => openKmzLog();
-    const all2 = m.querySelector('#kdAll'); if (all2) all2.onclick = async () => { if (await confirmBox('¿Eliminar ' + list.length.toLocaleString('es') + ' ' + lab[tab].toLowerCase() + '?', 'Solo de “' + k + '”' + (q0 ? ' que coinciden con “' + q0 + '”' : '') + '. También en la web y en los teléfonos. No se puede deshacer.', 'Eliminar', true)) { busy('Eliminando…'); await new Promise(r => setTimeout(r, 30)); await removeFeats(list); idle(); toast('Eliminado: ' + list.length); openKmzDetail(k, tab, ''); } };
-    m.querySelector('#kdL').onclick = async ev => {
-      const v = ev.target.closest('[data-v]'), d = ev.target.closest('[data-d]');
-      if (v) { const f = S.feats.find(x => x.id === +v.dataset.v); if (f) { closeModal(); select(f, true); } }
-      if (d) { const f = S.feats.find(x => x.id === +d.dataset.d); if (f && await confirmBox('¿Eliminar ' + f.n + '?', 'Se quitará también en la web y en los teléfonos.', 'Eliminar', true)) { await removeFeats([f]); toast('Eliminado'); openKmzDetail(k, tab, q0); } }
+    const m = modal('<h3>' + esc(k) + '</h3><div class="chips" id="kdT"></div>' +
+      '<input class="evsearch" id="kdQ" placeholder="Buscar por nombre…" autocomplete="off" value="' + esc(st.q) + '">' +
+      '<div class="evfilter" id="kdTools" style="margin:8px 0 2px"></div><p class="lead" id="kdInfo" style="margin:6px 0"></p><div id="kdL"></div>' +
+      '<div class="btnrow" style="position:sticky;bottom:-22px;background:var(--solid);padding:10px 0 4px"><button class="btn" id="kdB">Volver</button><button class="btn danger" id="kdDel" disabled>' + ic('trash') + 'Eliminar (0)</button></div>');
+    const q = s2 => m.querySelector(s2);
+    let byId = new Map();
+    const rowH = f => '<div class="urow" style="margin-left:' + (st.tab === 'p' && st.grp ? 14 : 0) + 'px"><input type="checkbox" data-c="' + f.id + '"' + checkAttr(st.sel.has(f.id)) + ' ' + CK + '><div class="meta"><b>' + esc(f.n) + '</b><small>' + esc(subOf(f)) + '</small></div>' + (f.t === 'p' ? '<button class="btn small" data-v="' + f.id + '">' + ic('pin') + '</button>' : '') + '<button class="btn small danger" data-d="' + f.id + '">' + ic('trash') + '</button></div>';
+    const grpH = (key, label, items, open) => {
+      const n = items.filter(f => st.sel.has(f.id)).length;
+      return '<div class="urow" style="background:var(--solid);border-color:var(--accent)"><input type="checkbox" data-gc="' + esc(key) + '"' + checkAttr(n === items.length && n > 0) + ' ' + CK + '><div class="meta"><b>' + esc(label) + '</b><small>' + items.length.toLocaleString('es') + ' elementos' + (n ? ' · ' + n + ' marcadas' : '') + '</small></div><button class="btn small" data-go="' + esc(key) + '">' + (open ? '▾' : '▸') + '</button></div>';
     };
+    let groupsNow = new Map();
+    function draw() {
+      const all = S.feats.filter(f => (f.src || 'Sin origen') === k), cnt = { p: 0, a: 0, l: 0 };
+      byId = new Map(); all.forEach(f => { cnt[f.t]++; byId.set(f.id, f); });
+      if (!all.length) { openKmzLog(); return; }
+      const t = norm(st.q), list = all.filter(f => f.t === st.tab && (!t || norm(f.n).includes(t)));
+      [...st.sel].forEach(id => { if (!byId.has(id)) st.sel.delete(id); });
+      q('#kdT').innerHTML = ['p', 'a', 'l'].map(x => '<button class="chip' + (x === st.tab ? ' on' : '') + '" data-t="' + x + '">' + lab[x] + ' · ' + cnt[x].toLocaleString('es') + '</button>').join('');
+      const nSel = list.filter(f => st.sel.has(f.id)).length;
+      q('#kdTools').innerHTML = '<button class="chip" data-all="1">' + (nSel === list.length && list.length ? 'Quitar selección' : 'Seleccionar todo (' + list.length.toLocaleString('es') + ')') + '</button>' + (st.tab === 'p' ? '<button class="chip' + (st.grp ? ' on' : '') + '" data-grp="1">Agrupar por distrito</button>' : '');
+      groupsNow = new Map(); let html = '', info = list.length.toLocaleString('es') + ' resultados';
+      if (st.tab === 'p' && st.grp && list.length) {
+        const { groups, rest } = groupDist(list, f => f.n, st.heads), force = !!t || (groups.length + (rest.length ? 1 : 0)) === 1;
+        groups.forEach(([key, items]) => { groupsNow.set(key, items); const open = force || st.open.has(key); html += grpH(key, key, items, open) + (open ? items.slice(0, 200).map(rowH).join('') + (items.length > 200 ? '<p class="lead" style="margin:0 0 8px 14px">Mostrando 200 de ' + items.length + '. Marca el distrito para elegirlos todos.</p>' : '') : ''); });
+        if (rest.length) { groupsNow.set('*', rest); const open = force || st.open.has('*'); html += grpH('*', groups.length ? 'Sin distrito' : 'Todas', rest, open) + (open ? rest.slice(0, 200).map(rowH).join('') + (rest.length > 200 ? '<p class="lead" style="margin:0 0 8px 14px">Mostrando 200 de ' + rest.length + '.</p>' : '') : ''); }
+        info += ' · ' + groups.length + (groups.length === 1 ? ' distrito' : ' distritos') + (rest.length ? ' + ' + rest.length + ' sin distrito' : '');
+      } else { html = list.slice(0, 80).map(rowH).join(''); if (list.length > 80) info += ' · mostrando 80 (usa “Seleccionar todo” para elegir los ' + list.length.toLocaleString('es') + ')'; }
+      q('#kdInfo').textContent = info; q('#kdL').innerHTML = html; hydrate(q('#kdL'));
+      const nAll = st.sel.size, del = q('#kdDel'); del.disabled = !nAll; del.lastChild.textContent = 'Eliminar (' + nAll.toLocaleString('es') + ')';
+      m._list = list;
+    }
+    q('#kdT').onclick = ev => { const b = ev.target.closest('[data-t]'); if (b) { st.tab = b.dataset.t; st.sel.clear(); draw(); } };
+    q('#kdTools').onclick = ev => {
+      if (ev.target.closest('[data-grp]')) { st.grp = !st.grp; draw(); return; }
+      if (ev.target.closest('[data-all]')) { const L = m._list || [], all = L.length && L.every(f => st.sel.has(f.id)); L.forEach(f => all ? st.sel.delete(f.id) : st.sel.add(f.id)); draw(); }
+    };
+    let tm = 0; q('#kdQ').oninput = ev => { clearTimeout(tm); const v = ev.target.value; tm = setTimeout(() => { st.q = v; draw(); }, 350); };
+    q('#kdB').onclick = () => openKmzLog();
+    q('#kdL').onchange = ev => {
+      const c = ev.target.closest('[data-c]'), g = ev.target.closest('[data-gc]');
+      if (c) { if (c.checked) st.sel.add(+c.dataset.c); else st.sel.delete(+c.dataset.c); draw(); }
+      if (g) { const items = groupsNow.get(g.dataset.gc) || []; items.forEach(f => g.checked ? st.sel.add(f.id) : st.sel.delete(f.id)); draw(); }
+    };
+    q('#kdL').onclick = async ev => {
+      const go = ev.target.closest('[data-go]'), v = ev.target.closest('[data-v]'), d = ev.target.closest('[data-d]');
+      if (go) { const key = go.dataset.go; if (st.open.has(key)) st.open.delete(key); else st.open.add(key); draw(); return; }
+      if (v) { const f = byId.get(+v.dataset.v); if (f) { closeModal(); select(f, true); } return; }
+      if (d) { const f = byId.get(+d.dataset.d); if (f) { if (await confirmBox('¿Eliminar ' + f.n + '?', 'Se quitará también en la web y en los teléfonos.', 'Eliminar', true)) { await removeFeats([f]); st.sel.delete(f.id); toast('Eliminado'); } openKmzDetail(k, st); } }
+    };
+    q('#kdDel').onclick = async () => {
+      const L = [...st.sel].map(id => byId.get(id)).filter(Boolean); if (!L.length) return;
+      if (await confirmBox('¿Eliminar ' + L.length.toLocaleString('es') + ' ' + (L.length === 1 ? 'elemento' : 'elementos') + '?', 'Solo de “' + k + '”. Se quitan también en la web y en los teléfonos. No se puede deshacer.', 'Eliminar', true)) {
+        busy('Eliminando…'); await new Promise(r => setTimeout(r, 30)); await removeFeats(L); idle(); st.sel.clear(); toast('Eliminado: ' + L.length.toLocaleString('es'));
+      }
+      openKmzDetail(k, st);
+    };
+    draw();
   }
 
   /* ---------- importar ---------- */
@@ -1587,20 +1678,27 @@
     S.evals.forEach(e => rows.push(evRow(e).concat([e.estado === 'hecha' ? 'Hecha' : 'Pendiente', e.nota || '', e.caja || '', e.lat == null ? '' : e.lat, e.lon == null ? '' : e.lon])));
     saveBlob(await XLS.write(rows, [26, 20, 40, 30, 14, 16, 16, 26, 12, 30, 24, 12, 12], 'Evaluaciones'), 'Evaluaciones_' + new Date().toISOString().slice(0, 10) + '.xlsx', true);
   }
-  const evF = { tipo: '', est: '', asg: '', q: '' };
+  const evF = { tipo: '', est: '', asg: '', q: '', src: '' };
   function openEvals() {
     const pend = S.evals.filter(e => e.estado !== 'hecha').length, cu = Cloud.user(), adm = isAdmin(), tech = cu && !adm;
     const rt = tech ? myRoute() : [], nx = rt[0];
     const m = modal('<h3>' + (tech ? 'Mis evaluaciones y ruta' : 'Evaluaciones técnicas') + '</h3>' +
       (rt.length ? '<div class="credbox" style="border-style:solid"><small style="color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-size:11px">Siguiente parada · ' + rt.length + (rt.length === 1 ? ' pendiente' : ' pendientes') + ' en tu ruta</small><br><b style="user-select:none">#' + (dispSeq(nx) || 1) + ' · ' + esc(nx.cliente || nx.orden) + '</b><br><span style="color:var(--muted);font-size:13px">' + esc(nx.direccion || '') + '</span><div class="btnrow" style="margin-top:10px"><button class="btn waze small" id="rtGo"' + (nx.lat == null ? ' disabled' : '') + '>' + ic('nav') + 'Ir con Waze</button><button class="btn small" id="rtMap">' + ic('pin') + 'Ver mi ruta</button></div></div>' : '') + '<div class="kpis"><div class="stat"><small>Total</small><b>' + S.evals.length + '</b></div><div class="stat"><small>Pendientes</small><b>' + pend + '</b></div><div class="stat"><small>Hechas</small><b>' + (S.evals.length - pend) + '</b></div></div>' +
       '<div class="evtools"><button class="btn accent" id="evImp">' + ic('upload') + 'Importar Excel</button><button class="btn" id="evTpl">' + ic('download') + 'Plantilla</button><button class="btn" id="evExp">' + ic('share') + 'Exportar</button></div>' +
+      (adm && S.evals.length ? '<div class="evfilter" style="margin:8px 0 4px"><b style="font-size:13px;color:var(--muted)">ARCHIVOS CARGADOS</b></div><div id="evFiles"></div>' : '') +
       '<div class="evfilter" id="evChips"></div><input class="evsearch" id="evQ" placeholder="Buscar cliente, orden o técnico…" autocomplete="off" value="' + esc(evF.q) + '"><div id="evList"></div>');
     hydrate(m);
-    const chips = [['', '', 'Todas'], ['tipo', 'Instalación', 'Instalación'], ['tipo', 'Daño', 'Daño'], ['est', 'pend', 'Pendientes'], ['est', 'hecha', 'Hechas']].concat(adm ? [['asg', 'none', 'Sin asignar'], ['asg', 'any', 'Asignadas']] : []);
+    const filesDraw = () => {
+      const box = m.querySelector('#evFiles'); if (!box) return; const mp = new Map();
+      S.evals.forEach(e => { const k = e.src || 'Sin archivo', o = mp.get(k) || { n: 0, p: 0, h: 0, a: 0 }; o.n++; if (e.estado === 'hecha') o.h++; else o.p++; if (e.asg) o.a++; mp.set(k, o); });
+      box.innerHTML = Array.from(mp).map(([k, o]) => '<div class="urow"><div class="meta"><b>' + esc(k) + '</b><small>' + o.n + ' evaluaciones · ' + o.p + ' pendientes · ' + o.h + ' hechas · ' + o.a + ' asignadas</small></div><button class="btn small' + (evF.src === k ? ' accent' : '') + '" data-fv="' + esc(k) + '">Ver</button><button class="btn small danger" data-fd="' + esc(k) + '">' + ic('trash') + '</button></div>').join('');
+      hydrate(box);
+    };
+    const chipsF = () => [['', '', 'Todas'], ['tipo', 'Instalación', 'Instalación'], ['tipo', 'Daño', 'Daño'], ['est', 'pend', 'Pendientes'], ['est', 'hecha', 'Hechas']].concat(adm ? [['asg', 'none', 'Sin asignar'], ['asg', 'any', 'Asignadas']] : []).concat(evF.src ? [['src', '', '✕ ' + (evF.src.length > 26 ? evF.src.slice(0, 25) + '…' : evF.src)]] : []);
     const list = () => {
-      m.querySelector('#evChips').innerHTML = chips.map(c => '<button class="chip' + ((!c[0] && !evF.tipo && !evF.est && !evF.asg) || (c[0] && evF[c[0]] === c[1]) ? ' on' : '') + '" data-k="' + c[0] + '" data-v="' + c[1] + '">' + c[2] + '</button>').join('');
+      m.querySelector('#evChips').innerHTML = chipsF().map(c => '<button class="chip' + ((!c[0] && !evF.tipo && !evF.est && !evF.asg) || (c[0] && evF[c[0]] === c[1]) ? ' on' : '') + '" data-k="' + c[0] + '" data-v="' + c[1] + '">' + c[2] + '</button>').join('');
       const t = norm(evF.q), ref = refPoint();
-      let L = S.evals.filter(e => (!evF.tipo || e.tipo === evF.tipo) && (!evF.est || (evF.est === 'hecha') === (e.estado === 'hecha')) && (!evF.asg || (evF.asg === 'none') === !e.asg) && (!t || evHay(e).includes(t)));
+      let L = S.evals.filter(e => (!evF.tipo || e.tipo === evF.tipo) && (!evF.est || (evF.est === 'hecha') === (e.estado === 'hecha')) && (!evF.asg || (evF.asg === 'none') === !e.asg) && (!evF.src || (e.src || 'Sin archivo') === evF.src) && (!t || evHay(e).includes(t)));
       L.forEach(e => e._d = e.lat != null ? hav(ref.lat, ref.lon, e.lat, e.lon) : null);
       L.sort((a, b) => (a.estado === 'hecha') - (b.estado === 'hecha') || (!(tech && a.asg) - !(tech && b.asg)) || (tech && a.asg && b.asg ? (a.seq || 1e9) - (b.seq || 1e9) : 0) || (a._d == null) - (b._d == null) || (a._d || 0) - (b._d || 0));
       m.querySelector('#evList').innerHTML = L.length ? L.slice(0, 200).map(e =>
@@ -1610,7 +1708,7 @@
         '<div class="evm"><span class="st ' + (e.estado === 'hecha' ? 'hecha' : 'pend') + '">' + (e.estado === 'hecha' ? 'Hecha' : 'Pendiente') + '</span><span class="dist">' + (e._d == null ? 'Sin ubicación' : fmtD(e._d)) + '</span></div></button>').join('')
         : '<p class="lead">' + (S.evals.length ? 'Ninguna evaluación coincide con el filtro.' : 'Todavía no hay evaluaciones. Toca “Plantilla” para bajar el Excel con el formato, llénalo y cárgalo con “Importar Excel”.') + '</p>';
     };
-    list();
+    list(); filesDraw();
     m.querySelector('#evImp').onclick = () => { closeModal(); $('#fileEval').click(); };
     if (m.querySelector('#rtGo')) m.querySelector('#rtGo').onclick = () => openExt('waze://?ll=' + nx.lat + ',' + nx.lon + '&navigate=yes', 'https://waze.com/ul?ll=' + nx.lat + ',' + nx.lon + '&navigate=yes&zoom=17');
     if (m.querySelector('#rtMap')) m.querySelector('#rtMap').onclick = () => { closeModal(); fitRoute(rt); };
@@ -1618,6 +1716,9 @@
     m.querySelector('#evExp').onclick = evExport;
     m.querySelector('#evQ').oninput = ev => { evF.q = ev.target.value; list(); };
     m.addEventListener('click', ev => {
+      const fv = ev.target.closest('[data-fv]'), fd = ev.target.closest('[data-fd]');
+      if (fv) { evF.src = evF.src === fv.dataset.fv ? '' : fv.dataset.fv; evF.tipo = ''; evF.est = ''; evF.asg = ''; list(); filesDraw(); const lq = m.querySelector('#evQ'); if (lq) lq.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
+      if (fd) { deleteEvalFile(fd.dataset.fd).then(ok => { if (ok && evF.src === fd.dataset.fd) evF.src = ''; openEvals(); }); return; }
       const c = ev.target.closest('.chip'); if (c) { evF.tipo = ''; evF.est = ''; evF.asg = ''; if (c.dataset.k) evF[c.dataset.k] = c.dataset.v; list(); return; }
       const b = ev.target.closest('.evc'); if (b) { const e = S.evals.find(x => x.id === b.dataset.id); if (e) openEvalDetail(e); }
     });
@@ -1679,6 +1780,31 @@
   const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
   const featU = f => f.u || (f.src === S.seedName ? 'seed:' + f.id : (f.u = uuid()));
   const metaGet = async (k, def) => { try { const v = await DB.getMeta(k); return v == null ? def : v; } catch (e) { return def; } };
+  async function addTombs(us, kind) {
+    if (!Cloud.user() || !us.length) return; const t = await metaGet('tomb', []), have = new Set(t.map(x => x.u));
+    us.forEach(u => { if (!have.has(u)) t.push({ u, kind: kind || 'feat' }); }); await DB.setMeta('tomb', t);
+  }
+  async function deleteEvalFile(src) {
+    const L = S.evals.filter(e => (e.src || 'Sin archivo') === src); if (!L.length) return false;
+    const asg = L.filter(e => e.asg).length, dn = L.filter(e => e.estado === 'hecha').length;
+    if (!(await confirmBox('¿Eliminar “' + src + '”?', 'Se borrarán ' + L.length.toLocaleString('es') + ' evaluaciones de este archivo' + (asg ? ' (' + asg + ' asignadas a técnicos)' : '') + (dn ? ', ' + (asg ? 'y ' : '') + dn + ' ya hechas' : '') + ', también en la web y en los teléfonos. No se puede deshacer.', 'Eliminar todo', true))) return false;
+    busy('Eliminando…'); await new Promise(r => setTimeout(r, 30));
+    const set = new Set(L), techs = new Set(L.map(e => e.asg).filter(Boolean));
+    await addTombs(L.map(e => 'ev:' + e.key), 'eval');
+    S.evals = S.evals.filter(e => !set.has(e)); techs.forEach(renum); await saveEvals(); map.invalidate(); idle();
+    toast('Eliminado: ' + L.length.toLocaleString('es') + ' evaluaciones', 3000); return true;
+  }
+  function distOrder(list, start, heads) {
+    const { groups, rest } = groupDist(list, e => e.caja || '', heads);
+    const cen = it => { const L = it.filter(e => e.lat != null); return L.length ? { lat: L.reduce((a, e) => a + e.lat, 0) / L.length, lon: L.reduce((a, e) => a + e.lon, 0) / L.length } : null; };
+    let cur = start, left = groups.map(([k, it]) => ({ it, c: cen(it) })), out = [];
+    while (left.length) {
+      let bi = 0, bd = 1e12; left.forEach((g, i) => { const d = g.c ? (cur ? hav(cur.lat, cur.lon, g.c.lat, g.c.lon) : 0) : 1e11; if (d < bd) { bd = d; bi = i; } });
+      const g = left.splice(bi, 1)[0], o = nearestOrder(g.it, cur); out = out.concat(o);
+      const l = o.filter(e => e.lat != null).pop(); if (l) cur = { lat: l.lat, lon: l.lon };
+    }
+    return out.concat(nearestOrder(rest, cur));
+  }
   async function addTomb(u, kind) {
     if (!Cloud.user()) return; const t = await metaGet('tomb', []); if (!t.some(x => x.u === u)) t.push({ u, kind: kind || 'feat' }); await DB.setMeta('tomb', t);
   }
@@ -1861,26 +1987,69 @@
     try { users = (await Cloud.listUsers()).filter(u => u.active !== false); } catch (e) { idle(); toast(Cloud.errText(e), 3500); return; } idle();
     const techs = users.filter(u => u.role === 'tecnico');
     if (!techs.length) { const m = modal('<h3>Asignaciones</h3><p class="lead">Todavía no hay técnicos. Créalos en Administración › Nuevo usuario y vuelve aquí.</p><button class="btn wide" id="asX">Cerrar</button>'); m.querySelector('#asX').onclick = closeModal; return; }
-    const st = { tech: (pre && pre.asg && techs.some(t => t.id === pre.asg) ? pre.asg : (S.asgLast && techs.some(t => t.id === S.asgLast) ? S.asgLast : techs[0].id)), sel: new Set(pre && !pre.asg ? [pre.id] : []), q: '' };
+    const st = { tech: (pre && pre.asg && techs.some(t => t.id === pre.asg) ? pre.asg : (S.asgLast && techs.some(t => t.id === S.asgLast) ? S.asgLast : techs[0].id)), sel: new Set(pre && !pre.asg ? [pre.id] : []), rsel: new Set(), q: '', grp: S.asgGrp || 'file', open: new Set(), heads: headSet() };
+    const evDist = e => { const d = distSuffix(e.caja); return d && st.heads.has(d) ? d : ''; };
     const render = () => {
-      S.asgLast = st.tech; const tech = techs.find(t => t.id === st.tech), t = norm(st.q);
+      const oldTop = (document.querySelector('#modalRoot .modal') || {}).scrollTop || 0;
+      S.asgLast = st.tech; S.asgGrp = st.grp; const tech = techs.find(t => t.id === st.tech), t = norm(st.q);
       const route = S.evals.filter(e => e.asg === tech.id && e.estado !== 'hecha').sort((a, b) => (a.seq || 1e9) - (b.seq || 1e9));
       const done = S.evals.filter(e => e.asg === tech.id && e.estado === 'hecha').length;
       const free = S.evals.filter(e => !e.asg && e.estado !== 'hecha' && (!t || evHay(e).includes(t)));
+      const rids = new Set(route.map(e => e.id)); [...st.rsel].forEach(id => { if (!rids.has(id)) st.rsel.delete(id); });
+      const others = techs.filter(u => u.id !== tech.id);
+      const gmap = new Map();
+      const freeRow = e => '<label class="urow" style="margin-left:' + (st.grp === 'none' ? 0 : 14) + 'px"><input type="checkbox" data-c="' + esc(e.id) + '"' + checkAttr(st.sel.has(e.id)) + ' ' + CK + '><div class="meta"><b>' + esc(e.cliente || e.orden) + '</b><small>Orden ' + esc(e.orden || '—') + ' · ' + esc(e.tipo || '') + (e.lat == null ? ' · sin ubicación' : '') + (st.grp !== 'dist' && evDist(e) ? ' · ' + esc(evDist(e)) : '') + '</small><small>' + esc(e.direccion || '') + '</small></div></label>';
+      let fh = '';
+      if (!free.length) fh = '<p class="lead">No hay evaluaciones sin asignar.</p>';
+      else if (st.grp === 'none') fh = free.slice(0, 150).map(freeRow).join('') + (free.length > 150 ? '<p class="lead">Mostrando 150 de ' + free.length + '. Usa “Todas” para elegirlas todas o busca.</p>' : '');
+      else {
+        let groups;
+        if (st.grp === 'file') { const mp = new Map(); free.forEach(e => { const k = e.src || 'Sin archivo'; if (!mp.has(k)) mp.set(k, []); mp.get(k).push(e); }); groups = Array.from(mp); }
+        else { const r = groupDist(free, e => e.caja || '', st.heads); groups = r.groups.slice(); if (r.rest.length) groups.push(['*', r.rest]); }
+        const force = !!t || groups.length === 1;
+        groups.forEach(([key, items]) => {
+          const gk = st.grp + ':' + key, open = force || st.open.has(gk), n = items.filter(e => st.sel.has(e.id)).length; gmap.set(gk, items);
+          fh += '<div class="urow" style="background:var(--solid);border-color:var(--accent)"><input type="checkbox" data-gc="' + esc(gk) + '"' + checkAttr(n === items.length && n > 0) + ' ' + CK + '><div class="meta"><b>' + esc(key === '*' ? (groups.length > 1 ? 'Sin distrito' : 'Todas') : key) + '</b><small>' + items.length + ' sin asignar' + (n ? ' · ' + n + ' marcadas' : '') + '</small></div>' +
+            (st.grp === 'file' ? '<button class="btn small danger" data-df="' + esc(key) + '" title="Eliminar este archivo del sistema">' + ic('trash') + '</button>' : '') + '<button class="btn small" data-go="' + esc(gk) + '">' + (open ? '▾' : '▸') + '</button></div>' +
+            (open ? items.slice(0, 150).map(freeRow).join('') + (items.length > 150 ? '<p class="lead" style="margin:0 0 8px 14px">Mostrando 150 de ' + items.length + '. Marca el grupo para elegirlas todas.</p>' : '') : '');
+        });
+      }
+      const allSel = free.length > 0 && free.every(e => st.sel.has(e.id));
       const m = modal('<h3>Asignaciones</h3><label class="field"><span>TÉCNICO</span><select class="sel" id="asT">' + techs.map(u => '<option value="' + esc(u.id) + '"' + (u.id === st.tech ? ' selected' : '') + '>' + esc(u.name) + (u.code ? ' (' + esc(u.code) + ')' : '') + '</option>').join('') + '</select></label>' +
         '<div class="kpis"><div class="stat"><small>En su ruta</small><b>' + route.length + '</b></div><div class="stat"><small>Hechas</small><b>' + done + '</b></div><div class="stat"><small>Sin asignar</small><b>' + S.evals.filter(e => !e.asg && e.estado !== 'hecha').length + '</b></div></div>' +
-        '<div class="evfilter" style="margin:4px 0 6px"><b style="font-size:13px;color:var(--muted)">RUTA DE ' + esc(tech.name.toUpperCase()) + '</b></div><div id="asRoute">' +
-        (route.length ? route.map((e, i) => '<div class="urow"><span class="av on">' + (i + 1) + '</span><div class="meta"><b>' + esc(e.cliente || e.orden) + '</b><small>Orden ' + esc(e.orden || '—') + ' · ' + esc(e.tipo || '') + (e.lat == null ? ' · sin ubicación' : '') + '</small><small>' + esc(e.direccion || '') + '</small></div>' +
+        '<div class="evfilter" style="margin:4px 0 6px"><b style="font-size:13px;color:var(--muted)">RUTA DE ' + esc(tech.name.toUpperCase()) + '</b></div>' +
+        (route.length ? '<div class="evfilter" style="margin:0 0 6px;gap:6px"><button class="chip" data-ra="1">' + (st.rsel.size === route.length ? 'Quitar selección' : 'Seleccionar todas') + '</button>' +
+          (st.rsel.size ? '<button class="chip" data-rq="1" style="color:var(--danger,#f87171)">Quitar de la ruta (' + st.rsel.size + ')</button>' + (others.length ? '<select class="sel" id="asMv" style="width:auto;padding:5px 10px;font-size:12.5px"><option value="">Mover a…</option>' + others.map(u => '<option value="' + esc(u.id) + '">' + esc(u.name) + '</option>').join('') + '</select>' : '') : '') + '</div>' : '') +
+        '<div id="asRoute">' +
+        (route.length ? route.map((e, i) => '<div class="urow"><input type="checkbox" data-rc="' + esc(e.id) + '"' + checkAttr(st.rsel.has(e.id)) + ' ' + CK + '><span class="av on" style="width:32px;height:32px;font-size:14px">' + (i + 1) + '</span><div class="meta"><b>' + esc(e.cliente || e.orden) + '</b><small>Orden ' + esc(e.orden || '—') + ' · ' + esc(e.tipo || '') + (evDist(e) ? ' · ' + esc(evDist(e)) : '') + (e.lat == null ? ' · sin ubicación' : '') + '</small><small>' + esc(e.direccion || '') + '</small></div>' +
           '<button class="btn small" data-up="' + esc(e.id) + '"' + (i === 0 ? ' disabled' : '') + '>▲</button><button class="btn small" data-dn="' + esc(e.id) + '"' + (i === route.length - 1 ? ' disabled' : '') + '>▼</button><button class="btn small danger" data-rm="' + esc(e.id) + '">✕</button></div>').join('') : '<p class="lead">Sin paradas todavía. Marca evaluaciones abajo y toca “Asignar”.</p>') + '</div>' +
-        '<div class="evtools"><button class="btn" id="asOpt"' + (route.length < 2 ? ' disabled' : '') + '>' + ic('nav') + 'Ordenar por cercanía</button><button class="btn" id="asMap"' + (route.length ? '' : ' disabled') + '>' + ic('map') + 'Ver ruta en el mapa</button></div>' +
-        '<div class="evfilter" style="margin:12px 0 6px"><b style="font-size:13px;color:var(--muted)">SIN ASIGNAR</b></div><input class="evsearch" id="asQ" placeholder="Buscar cliente u orden…" autocomplete="off" value="' + esc(st.q) + '"><div id="asFree">' +
-        (free.length ? free.slice(0, 120).map(e => '<label class="urow"><input type="checkbox" data-c="' + esc(e.id) + '"' + (st.sel.has(e.id) ? ' checked' : '') + ' style="width:20px;height:20px;accent-color:var(--accent)"><div class="meta"><b>' + esc(e.cliente || e.orden) + '</b><small>Orden ' + esc(e.orden || '—') + ' · ' + esc(e.tipo || '') + (e.lat == null ? ' · sin ubicación' : '') + '</small><small>' + esc(e.direccion || '') + '</small></div></label>').join('') : '<p class="lead">No hay evaluaciones sin asignar.</p>') + '</div>' +
-        '<div class="btnrow" style="position:sticky;bottom:-22px;background:var(--solid);padding:10px 0 4px"><button class="btn" id="asAll">Todas</button><button class="btn accent" id="asGo"' + (st.sel.size ? '' : ' disabled') + '>' + ic('check') + 'Asignar (' + st.sel.size + ')</button></div>');
-      hydrate(m); const q = s => m.querySelector(s);
-      q('#asT').onchange = ev => { st.tech = ev.target.value; st.sel.clear(); render(); };
+        '<div class="evtools"><button class="btn" id="asOpt"' + (route.length < 2 ? ' disabled' : '') + '>' + ic('nav') + 'Por cercanía</button><button class="btn" id="asDist"' + (route.length < 2 ? ' disabled' : '') + '>' + ic('layers') + 'Por distrito</button><button class="btn" id="asMap"' + (route.length ? '' : ' disabled') + '>' + ic('map') + 'Ver en el mapa</button></div>' +
+        '<div class="evfilter" style="margin:12px 0 6px"><b style="font-size:13px;color:var(--muted)">SIN ASIGNAR</b></div><input class="evsearch" id="asQ" placeholder="Buscar cliente u orden…" autocomplete="off" value="' + esc(st.q) + '">' +
+        '<div class="evfilter" style="margin:6px 0;gap:6px"><span style="font-size:12.5px;color:var(--muted);align-self:center">Agrupar:</span>' + [['file', 'Por archivo'], ['dist', 'Por distrito'], ['none', 'Sin agrupar']].map(x => '<button class="chip' + (st.grp === x[0] ? ' on' : '') + '" data-g="' + x[0] + '">' + x[1] + '</button>').join('') + '</div><div id="asFree">' + fh + '</div>' +
+        '<div class="btnrow" style="position:sticky;bottom:-22px;background:var(--solid);padding:10px 0 4px"><button class="btn" id="asAll">' + (allSel ? 'Ninguna' : 'Todas (' + free.length + ')') + '</button><button class="btn accent" id="asGo"' + (st.sel.size ? '' : ' disabled') + '>' + ic('check') + 'Asignar (' + st.sel.size + ')</button></div>');
+      hydrate(m); const q = s2 => m.querySelector(s2); m.scrollTop = oldTop;
+      q('#asT').onchange = ev => { st.tech = ev.target.value; st.sel.clear(); st.rsel.clear(); render(); };
       q('#asQ').oninput = ev => { st.q = ev.target.value; const pos = ev.target.selectionStart; render(); const i = document.querySelector('#asQ'); i.focus(); i.setSelectionRange(pos, pos); };
-      q('#asFree').onchange = ev => { const c = ev.target.closest('[data-c]'); if (!c) return; if (c.checked) st.sel.add(c.dataset.c); else st.sel.delete(c.dataset.c); q('#asGo').disabled = !st.sel.size; q('#asGo').lastChild.textContent = 'Asignar (' + st.sel.size + ')'; };
-      q('#asAll').onclick = () => { free.slice(0, 120).forEach(e => st.sel.add(e.id)); render(); };
+      m.onchange = ev => {
+        const c = ev.target.closest('[data-c]'), g = ev.target.closest('[data-gc]'), r = ev.target.closest('[data-rc]');
+        if (c) { if (c.checked) st.sel.add(c.dataset.c); else st.sel.delete(c.dataset.c); render(); }
+        else if (g) { (gmap.get(g.dataset.gc) || []).forEach(e => g.checked ? st.sel.add(e.id) : st.sel.delete(e.id)); render(); }
+        else if (r) { if (r.checked) st.rsel.add(r.dataset.rc); else st.rsel.delete(r.dataset.rc); render(); }
+      };
+      m.onclick = async ev => {
+        const go = ev.target.closest('[data-go]'), df = ev.target.closest('[data-df]'), gg = ev.target.closest('[data-g]'), ra = ev.target.closest('[data-ra]'), rq = ev.target.closest('[data-rq]');
+        if (go) { const k = go.dataset.go; if (st.open.has(k)) st.open.delete(k); else st.open.add(k); render(); }
+        else if (df) { if (await deleteEvalFile(df.dataset.df)) { st.sel.clear(); st.rsel.clear(); } render(); }
+        else if (gg) { st.grp = gg.dataset.g; render(); }
+        else if (ra) { if (st.rsel.size === route.length) st.rsel.clear(); else route.forEach(e => st.rsel.add(e.id)); render(); }
+        else if (rq) { const L = route.filter(e => st.rsel.has(e.id)); L.forEach(unassign); st.rsel.clear(); await saveEvals(); map.invalidate(); toast(L.length + (L.length === 1 ? ' evaluación devuelta a “sin asignar”' : ' evaluaciones devueltas a “sin asignar”'), 3000); render(); }
+      };
+      if (q('#asMv')) q('#asMv').onchange = async ev => {
+        const nt = techs.find(u => u.id === ev.target.value); if (!nt) return; const L = route.filter(e => st.rsel.has(e.id));
+        L.forEach(e => { e.prev = Array.from(new Set((e.prev || []).concat([tech.id]))); assignTo(e, nt); }); renum(tech.id); st.rsel.clear();
+        await saveEvals(); map.invalidate(); toast(L.length + (L.length === 1 ? ' evaluación movida a ' : ' evaluaciones movidas a ') + nt.name, 3000); render();
+      };
+      q('#asAll').onclick = () => { if (allSel) st.sel.clear(); else free.forEach(e => st.sel.add(e.id)); render(); };
       q('#asGo').onclick = async () => {
         const L = S.evals.filter(e => st.sel.has(e.id) && !e.asg); L.forEach(e => assignTo(e, tech)); st.sel.clear(); await saveEvals(); map.invalidate(); toast(L.length + (L.length === 1 ? ' evaluación asignada a ' : ' evaluaciones asignadas a ') + tech.name, 3000); render();
       };
@@ -1895,8 +2064,11 @@
         const u = tech, start = u.lat != null ? { lat: u.lat, lon: u.lon } : null, ord = nearestOrder(route, start);
         ord.forEach((e, i) => { if (e.seq !== i + 1) { e.seq = i + 1; e.ts = Date.now(); } }); await saveEvals(); map.invalidate(); toast('Ruta ordenada por cercanía' + (start ? ' desde su última ubicación' : ''), 3000); render();
       };
+      q('#asDist').onclick = async () => {
+        const u = tech, start = u.lat != null ? { lat: u.lat, lon: u.lon } : null, ord = distOrder(route, start, st.heads), nD = new Set(route.map(evDist).filter(Boolean)).size;
+        ord.forEach((e, i) => { if (e.seq !== i + 1) { e.seq = i + 1; e.ts = Date.now(); } }); await saveEvals(); map.invalidate(); toast(nD ? 'Ruta agrupada por distrito (' + nD + (nD === 1 ? ' distrito' : ' distritos') + ') y ordenada por cercanía' : 'Ninguna parada pertenece a un distrito: se ordenó por cercanía', 3500); render();
+      };
       q('#asMap').onclick = () => { closeModal(); setRouteView(tech.id, tech.name); fitRoute(); };
-      m.querySelector('.grab') && null;
     };
     render();
   }

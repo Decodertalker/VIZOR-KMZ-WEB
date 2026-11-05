@@ -211,3 +211,11 @@ PASO OBLIGATORIO: ejecutar 7_admin_principal.sql en Supabase (después de 1_ a 6
 v3.31 - Actualizaciones por nombre de versión
  - Se ofrece la actualización si el NOMBRE publicado es mayor que el instalado (4.0 -> 4.1 -> 5.0), aunque el número (versionCode) no sea mayor. Aplica al aviso dentro de la app, al botón "Buscar actualización" y a la notificación en segundo plano.
  - Android igualmente exige que el APK nuevo tenga versionCode MAYOR que el instalado (y la misma firma) para poder instalarlo: súbelo en build.gradle en cada versión.
+
+v3.32 - Si el nombre publicado es MENOR que el instalado ya no se ofrece (aunque el número sea mayor). Si el nombre es igual, decide el número.
+
+v3.33 - Selección múltiple, distritos, archivos y clic derecho
+ - Detalle de KMZ: casillas para elegir varias cajas/áreas/rutas, "Seleccionar todo", agrupar por distrito (NI001/002-JUAN0108 pertenece a JUAN0108 si existe esa caja) y "Eliminar (n)".
+ - Asignaciones: casillas en la ruta (quitar varias o moverlas a otro técnico), sin asignar agrupado por archivo / distrito / sin agrupar, marcar un grupo completo, botón "Por distrito" para ordenar la ruta, y papelera por archivo para eliminarlo del sistema.
+ - Evaluaciones técnicas (admin): panel "Archivos cargados" con detalle, filtro por archivo y eliminar archivo.
+ - Mapa: clic derecho (o mantener pulsado en el teléfono) abre menú: cajas cercanas a ese punto, copiar coordenadas/enlace, Google Maps, Waze, medir, agregar caja (admin), y acciones sobre una caja o evaluación.

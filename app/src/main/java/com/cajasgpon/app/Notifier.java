@@ -125,7 +125,7 @@ final class Notifier {
             int code = o.optInt("code", 0);
             String ver = o.optString("version", "");
             String key2 = ver + "|" + code;
-            if (notify && (code > versionCode(c) || verGt(ver, versionName(c))) && !key2.equals(p.getString("relNoteK", ""))) {
+            if (notify && (verGt(ver, versionName(c)) || (!verGt(versionName(c), ver) && code > versionCode(c))) && !key2.equals(p.getString("relNoteK", ""))) {
                 p.edit().putString("relNoteK", key2).apply();
                 {
                     String notes = o.optString("notes", "");

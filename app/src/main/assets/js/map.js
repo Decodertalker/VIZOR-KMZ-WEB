@@ -23,7 +23,7 @@
       this.src = null; this.tiles = new Map(); this.queue = []; this.low = []; this.old = null; this.zt = null; this.inflight = 0; this.frame = 0;
       this.bg = '#0b1220'; this.grid = 'rgba(255,255,255,.04)';
       this.vec = null; this.onNetBad = null; this._fails = 0; this._okAt = 0;
-      this.lock = null; this.onDraw = null; this.onTap = null; this.onMove = null; this.onMoveEnd = null; this.onUserMove = null;
+      this.lock = null; this.onDraw = null; this.onTap = null; this.onContext = null; this.onMove = null; this.onMoveEnd = null; this.onUserMove = null;
       this.anim = null; this.inertia = null; this._raf = 0; this._moveEndT = 0;
       this.gm = null; this._hold = 0; this._gl = 0; this.rot = 0; this.rotT = null; this.onRot = null;
       this._bind();
@@ -111,6 +111,7 @@
           if (performance.now() > this._hold) { if (this.onUserMove) this.onUserMove(); if (!this.gOwn) this._zoomHide(true); }   // Google anima su zoom por dentro: mientras dura, los datos no se dibujan para que no "naden" fuera de su sitio
         });
         gm.addListener('idle', () => { dbg('evt idle', { gz: f4(gm.getZoom()), z: f4(this.z), zh: !!this._zh }); if (this._zh) { this._hold = 0; this._poll(); this._zoomHide(false); } });
+        gm.addListener('rightclick', e => { if (this.gOwn || !e.latLng || !this.onContext) return; const p = this.toScreen(e.latLng.lat(), e.latLng.lng()), de = e.domEvent || {}; this.onContext(p[0], p[1], de.clientX != null ? de.clientX : innerWidth / 2, de.clientY != null ? de.clientY : innerHeight / 2); });
         gm.addListener('click', e => { if (this.gOwn || !e.latLng || !this.onTap) return; const p = this.toScreen(e.latLng.lat(), e.latLng.lng()); this.onTap(p[0], p[1]); });
         if (!this._loopOn) { this._loopOn = 1; const loop = () => { this._poll(); requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
       }
@@ -395,7 +396,7 @@
     /* ---- gestos ---- */
     _bind() {
       const cv = this.cv, P = new Map();
-      let moved = 0, t0 = 0, lastTap = { t: 0, x: 0, y: 0 }, pinch = null, v = { x: 0, y: 0, t: 0 };
+      let lpT = 0, moved = 0, t0 = 0, lastTap = { t: 0, x: 0, y: 0 }, pinch = null, v = { x: 0, y: 0, t: 0 };
       const pos = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
       const U = p => this.rot ? this._un(p.x, p.y) : p;   // pantalla → mapa sin girar
       const pstate = () => {
@@ -407,6 +408,8 @@
         this.anim = null; this.inertia = null; this.zt = null; this.rotT = null;
         this.onUserMove && this.onUserMove();
         if (P.size === 1) { moved = 0; t0 = performance.now(); v = { x: 0, y: 0, t: t0 }; }
+        clearTimeout(lpT);
+        if (P.size === 1 && e.pointerType !== 'mouse' && this.onContext) { const sx = e.clientX, sy = e.clientY; lpT = setTimeout(() => { if (P.size === 1 && moved < 8) { moved = 99; this._lpAt = performance.now(); const q = U(pos({ clientX: sx, clientY: sy })); this.onContext(q.x, q.y, sx, sy); } }, 650); }
         if (P.size === 2) {
           const s = pstate(), m = U({ x: s.mx, y: s.my });
           pinch = { d: s.d, ang: s.ang, rot0: this.rot, on: false, base: 0, z: this.z, wx: (m.x - this.w / 2) / this.s + this.cx, wy: (m.y - this.h / 2) / this.s + this.cy };
@@ -440,6 +443,7 @@
         }
       });
       const up = e => {
+        clearTimeout(lpT);
         if (!P.has(e.pointerId)) return;
         const p = pos(e), wasOne = P.size === 1; P.delete(e.pointerId);
         if (wasOne) {
@@ -455,6 +459,7 @@
         if (P.size < 2) pinch = null;
       };
       cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+      cv.addEventListener('contextmenu', e => { e.preventDefault(); if (performance.now() - (this._lpAt || 0) < 1500 || !this.onContext) return; const q = U(pos(e)); this.onContext(q.x, q.y, e.clientX, e.clientY); });
       cv.addEventListener('wheel', e => {
         e.preventDefault(); const p = pos(e);
         this.onUserMove && this.onUserMove();
