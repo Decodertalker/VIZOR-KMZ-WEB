@@ -228,3 +228,8 @@ v3.36 - Actualización forzada (requiere 10_actualizacion_forzada.sql en Supabas
  - Al publicar: "Forzar si la app va N versiones atrasada" (0 = no) y "Número mínimo permitido" (0 = sin mínimo). Una app que cumpla la condición no puede cerrar el aviso (sin "Más tarde") hasta instalar la nueva. El atraso se mide por el número de versión: súbelo de 1 en 1.
  - La actualización "obligatoria" ya no se puede cerrar tocando fuera del aviso.
  - El aviso muestra instalada vs publicada con nombre y número.
+
+v3.37 - Una sesión por tipo de dispositivo + visor de dispositivos (requiere 11_sesiones.sql en Supabase)
+ - Cada usuario puede tener a la vez UNA sesión web y UNA de la app Android. Al entrar en otro equipo del mismo tipo, la anterior se cierra y muestra "Tu cuenta se abrió en otro dispositivo".
+ - Menú > "Dispositivos y sesiones" (solo admin principal): usuario, tipo, equipo, IP, versión, última actividad y última ubicación (botón Ver = la marca en el mapa), y cerrar sesiones.
+ - El servicio en segundo plano también suelta el token si la sesión fue reemplazada o cerrada.

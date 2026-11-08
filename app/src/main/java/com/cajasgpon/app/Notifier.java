@@ -266,7 +266,7 @@ final class Notifier {
                 is.close();
             }
             String txt = bo.toString("UTF-8");
-            if (code >= 400) throw new Exception(txt.contains("no_session") ? "no_session" : "http_" + code);
+            if (code >= 400) throw new Exception((txt.contains("no_session") || txt.contains("session_replaced") || txt.contains("session_closed")) ? "no_session" : "http_" + code);
             return txt;
         } finally {
             c.disconnect();

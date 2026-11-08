@@ -28,7 +28,7 @@
 
   const MSG = {
     bad_credentials: 'Usuario o contraseña incorrectos', locked: 'Demasiados intentos. Espera 5 minutos e inténtalo otra vez',
-    no_session: 'Tu sesión terminó. Entra de nuevo', forbidden: 'Solo el administrador puede hacer esto',
+    no_session: 'Tu sesión terminó. Entra de nuevo', session_replaced: 'Tu cuenta se abrió en otro dispositivo del mismo tipo (web o app). Esta sesión se cerró', session_closed: 'El administrador cerró tu sesión. Entra de nuevo', forbidden: 'Solo el administrador puede hacer esto',
     username_taken: 'Ese usuario ya existe', bad_username: 'El usuario debe tener 3 a 30 letras, números, punto, guion o guion bajo (sin espacios)',
     bad_name: 'Escribe el nombre completo', weak_password: 'La contraseña es muy corta (mínimo 8 para la tuya, 6 para una inicial)',
     bad_items: 'Datos no válidos', cannot_delete_self: 'No puedes eliminar ni suspender tu propia cuenta', not_found: 'El usuario ya no existe', bad_location: 'Ubicación no válida',
@@ -54,7 +54,7 @@
     if (!res.ok) {
       const code = j && (j.message || j.hint) ? String(j.message).trim() : 'http_' + res.status;
       const er = new Error(MSG[code] || (j && j.message) || 'Error ' + res.status); er.code = code;
-      if (code === 'no_session' && ses) { ses = null; wr(K_SES, null); if (api.onExpired) api.onExpired(); }
+      if ((code === 'no_session' || code === 'session_replaced' || code === 'session_closed') && ses) { ses = null; wr(K_SES, null); if (api.onExpired) api.onExpired(code); }
       throw er;
     }
     return j;
@@ -112,6 +112,8 @@
     createUser: (username, name, code, role, pass) => rpc('cj_create_user', { p_token: tk(), p_username: username, p_name: name, p_code: code || '', p_role: role, p_pass: pass }),
     deleteUser: id => rpc('cj_delete_user', { p_token: tk(), p_id: id }),
     updateUser: (id, name, code, role) => rpc('cj_update_user', { p_token: tk(), p_id: id, p_name: name, p_code: code || '', p_role: role }),
+    sessionsList: () => rpc('cj_sessions_list', { p_token: tk() }),
+    sessionClose: id => rpc('cj_session_close', { p_token: tk(), p_id: id }),
     userLogins: id => rpc('cj_user_logins', { p_token: tk(), p_id: id }),
     resetPassword: (id, pass) => rpc('cj_reset_password', { p_token: tk(), p_id: id, p_new: pass }),
     setActive: (id, on) => rpc('cj_set_active', { p_token: tk(), p_id: id, p_active: !!on }),

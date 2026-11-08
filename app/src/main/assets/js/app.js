@@ -1175,7 +1175,7 @@
     const nEv = S.evals.length, pEv = S.evals.filter(e => e.estado !== 'hecha').length;
     const items = [
       ...(cu && NB ? [['download', 'Buscar actualización', 'Versión instalada: ' + instName(), 'upd']] : []),
-      ...(isSuper() ? [['upload', 'Publicar actualización', 'Avisa a todas las aplicaciones que hay una versión nueva', 'relpub'], ['box', 'KMZ subidos (detalle)', 'Quién subió qué, y eliminar a detalle', 'kmzlog']] : []),
+      ...(isSuper() ? [['upload', 'Publicar actualización', 'Avisa a todas las aplicaciones que hay una versión nueva', 'relpub'], ['box', 'KMZ subidos (detalle)', 'Quién subió qué, y eliminar a detalle', 'kmzlog'], ['team', 'Dispositivos y sesiones', 'Quién está conectado, desde qué equipo y su última ubicación', 'devices']] : []),
       ...(adm ? [['team', 'Administración', 'Usuarios y ubicación del equipo', 'admin'], ['clip', 'Asignaciones', 'Asignar evaluaciones y rutas a los técnicos', 'asig'], ['box', 'Datos de cajas y KMZ', 'Ver, agregar y eliminar lo que se sincroniza', 'datos']] : []),
       ...(cu ? [['reset', 'Sincronización automática', SY.err ? 'Error: ' + SY.err + ' · toca para reintentar' : (SY.t ? 'Al día · última vez ' + ago(SY.t) : 'Web y app comparten los mismos datos'), 'sync']] : []),
       ...(cu ? [['user', 'Mi cuenta', cu.name + ' · ' + (cu.role === 'admin' ? 'Administrador' : 'Técnico'), 'acct']] : (Cloud.configured() ? [] : [['user', 'Conectar servidor', 'Activa usuarios, administrador y ubicación del equipo', 'srv']])),
@@ -1190,7 +1190,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.36 · ' + esc((BASES[S.base] || {}).label || 'mapa') + '</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.37 · ' + esc((BASES[S.base] || {}).label || 'mapa') + '</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {
@@ -1203,6 +1203,7 @@
       if (a === 'acct') openAccount();
       if (a === 'upd') checkRelease(true);
       if (a === 'relpub') openRelease();
+      if (a === 'devices') openDevices();
       if (a === 'kmzlog') openKmzLog();
       if (a === 'nbtest') { toast('Probando…', 1500); try { NB.testNotify(); } catch (e) { toast('No disponible en esta versión', 3000); } }
       if (a === 'srv') openServer();
@@ -1218,12 +1219,14 @@
   }
 
   /* ---------- administrador principal · actualizaciones · KMZ subidos ---------- */
-  const APP_VER = '3.36', APP_CODE = 55;   // APP_CODE = versionCode de esta versión (igual que app/build.gradle)
+  const APP_VER = '3.37', APP_CODE = 56;   // APP_CODE = versionCode de esta versión (igual que app/build.gradle)
   // Enlaces de Google Drive -> descarga directa
   const driveDirect = u => { u = String(u || '').trim(); const m = u.match(/^https:\/\/(?:drive|docs)\.google\.com\/(?:file\/d\/|open\?(?:[^#]*&)?id=|uc\?(?:[^#]*&)?id=)([A-Za-z0-9_-]{10,})/); return m ? 'https://drive.usercontent.google.com/download?id=' + m[1] + '&export=download&confirm=t' : u; };
   window.__loginInfo = () => {
     const ua = navigator.userAgent || '', mm = ua.match(/Android[^;)]*;\s*([^;)]+?)(?:\sBuild|[;)])/);
     const o = { kind: NB ? 'app' : 'web', device: (mm ? mm[1] : (/iPhone|iPad/.test(ua) ? 'iPhone/iPad' : /Windows/.test(ua) ? 'Windows' : /Mac OS/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : 'Otro')) + ' · ' + (/Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Navegador') };
+    try { let d = localStorage.getItem('vz_did'); if (!d) { d = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2)); localStorage.setItem('vz_did', d); } o.did = d; } catch (e) { }
+    o.ver = APP_VER;
     if (S.pos && Date.now() - (S.pos.t || Date.now()) < 120000) { o.lat = S.pos.lat; o.lon = S.pos.lon; o.acc = S.pos.acc; }
     return o;
   };
@@ -1258,6 +1261,41 @@
   }
   setTimeout(() => checkRelease(false), 6000);
   setInterval(() => { if (!document.hidden) checkRelease(false); }, 10 * 60 * 1000);
+
+  /* ---------- dispositivos y sesiones (solo administrador principal) ---------- */
+  const hace = t => { if (!t) return ''; const s = Math.max(0, (Date.now() - new Date(t).getTime()) / 1000); return s < 60 ? 'hace unos segundos' : s < 3600 ? 'hace ' + Math.round(s / 60) + ' min' : s < 86400 ? 'hace ' + Math.round(s / 3600) + ' h' : 'hace ' + Math.round(s / 86400) + ' d'; };
+  async function openDevices(st) {
+    if (!isSuper()) return;
+    st = st || { f: 'act', q: '' };
+    busy('Consultando…'); let L; try { L = await Cloud.sessionsList(); } catch (e) { idle(); toast(Cloud.errText(e), 3500); return; } idle();
+    const act = L.filter(x => !x.revoked_at), t = norm(st.q);
+    const view = L.filter(x => (st.f === 'all' || (st.f === 'act') === !x.revoked_at) && (!t || norm(x.name + ' ' + x.username + ' ' + (x.device || '') + ' ' + (x.ip || '')).includes(t)));
+    const nW = act.filter(x => x.platform === 'web').length, nA = act.filter(x => x.platform === 'app').length;
+    const card = x => {
+      const on = !x.revoked_at, live = on && x.last_seen && Date.now() - new Date(x.last_seen).getTime() < 150000;
+      const why = x.revoked_reason === 'closed' ? 'Cerrada por el administrador' : 'Reemplazada por otro dispositivo';
+      return '<div class="urow" style="align-items:flex-start;' + (on ? '' : 'opacity:.7') + '"><div class="meta"><b>' + esc(x.name) + ' <small style="font-weight:500">· ' + esc(x.username) + (x.role === 'admin' ? ' · admin' : '') + '</small></b>' +
+        '<small><b style="color:' + (x.platform === 'app' ? 'var(--accent)' : 'var(--text)') + '">' + (x.platform === 'app' ? 'App Android' : 'Web') + '</b> · ' + esc(x.device || 'Equipo sin nombre') + (x.app_ver ? ' · v' + esc(x.app_ver) : '') + '</small>' +
+        '<small>' + (x.ip ? 'IP ' + esc(x.ip) + ' · ' : '') + 'Inició ' + esc(fdate(x.created_at)) + '</small>' +
+        '<small>' + (on ? (live ? '<b style="color:var(--accent)">● En línea</b>' : 'Visto ' + hace(x.last_seen)) + (x.current ? ' · esta sesión' : '') : esc(why) + ' · ' + hace(x.revoked_at)) + '</small>' +
+        '<small>' + (x.lat != null ? 'Última ubicación ' + hace(x.loc_at) + (x.acc ? ' (±' + Math.round(x.acc) + ' m)' : '') : 'Sin ubicación') + '</small></div>' +
+        '<div style="display:flex;flex-direction:column;gap:6px">' + (x.lat != null ? '<button class="btn small" data-loc="' + esc(x.id) + '">' + ic('pin') + ' Ver</button>' : '') + (on && !x.current ? '<button class="btn small danger" data-cl="' + esc(x.id) + '">Cerrar</button>' : '') + '</div></div>';
+    };
+    const m = modal('<h3>Dispositivos y sesiones</h3><p class="lead">Cada usuario puede tener <b>una sesión web y una sesión de la app</b> al mismo tiempo. Al entrar desde otro equipo del mismo tipo, la sesión anterior se cierra sola.</p>' +
+      '<div class="kpis"><div class="stat"><small>Activas</small><b>' + act.length + '</b></div><div class="stat"><small>Web</small><b>' + nW + '</b></div><div class="stat"><small>App</small><b>' + nA + '</b></div></div>' +
+      '<div class="evfilter" style="margin:8px 0">' + [['act', 'Activas'], ['off', 'Cerradas'], ['all', 'Todas']].map(c => '<button class="chip' + (st.f === c[0] ? ' on' : '') + '" data-f="' + c[0] + '">' + c[1] + '</button>').join('') + '</div>' +
+      '<input class="evsearch" id="dvQ" placeholder="Buscar usuario, equipo o IP…" value="' + esc(st.q) + '" autocomplete="off"><div id="dvL" style="margin-top:8px">' + (view.length ? view.map(card).join('') : '<p class="lead">No hay sesiones en esta lista.</p>') + '</div>' +
+      '<div class="btnrow"><button class="btn" id="dvR">Actualizar</button><button class="btn accent" id="dvX">Cerrar</button></div>');
+    hydrate(m); const q = x => m.querySelector(x);
+    q('#dvX').onclick = closeModal; q('#dvR').onclick = () => openDevices(st);
+    q('#dvQ').onkeydown = ev => { if (ev.key === 'Enter') { st.q = ev.target.value; openDevices(st); } };
+    m.onclick = async ev => {
+      const f = ev.target.closest('[data-f]'), lo = ev.target.closest('[data-loc]'), cl = ev.target.closest('[data-cl]');
+      if (f) { st.f = f.dataset.f; st.q = q('#dvQ').value; openDevices(st); }
+      else if (lo) { const x = L.find(y => y.id === lo.dataset.loc); if (x) { closeModal(); setPin(x.lat, x.lon); map.flyTo(x.lat, x.lon, 17, 0.1); toast(x.name + ' · ' + (x.platform === 'app' ? 'App' : 'Web') + ' · ' + hace(x.loc_at), 5000); } }
+      else if (cl) { const x = L.find(y => y.id === cl.dataset.cl); if (x && await confirmBox('¿Cerrar la sesión de ' + x.name + '?', (x.platform === 'app' ? 'App Android' : 'Web') + ' · ' + (x.device || '') + '. Ese equipo tendrá que iniciar sesión otra vez.', 'Cerrar sesión', true)) { try { await Cloud.sessionClose(x.id); toast('Sesión cerrada'); } catch (e) { toast(Cloud.errText(e), 3500); } } if (cl) openDevices(st); }
+    };
+  }
 
   async function openRelease() {
     if (!isSuper()) return;
@@ -2142,7 +2180,7 @@
 
   let sessionOn = false;
   function initCloud() {
-    Cloud.onExpired = () => { stopSession(); showLogin('login', 'Tu sesión terminó. Entra de nuevo'); };
+    Cloud.onExpired = code => { stopSession(); showLogin('login', Cloud.errText({ code: code || 'no_session' })); };
     if (!Cloud.configured()) return;
     if (!Cloud.session()) showLogin('login'); else startSession();
   }
