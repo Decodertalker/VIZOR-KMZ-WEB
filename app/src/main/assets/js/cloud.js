@@ -118,7 +118,7 @@
     sendLocation: (lat, lon, acc, speed) => rpc('cj_send_location', { p_token: tk(), p_lat: lat, p_lon: lon, p_acc: acc == null ? null : acc, p_speed: speed == null || !isFinite(speed) ? null : speed }, 10000),
     locations: () => rpc('cj_locations', { p_token: tk() }),
     releaseGet: () => rpc('cj_release_get', { p_token: tk() }),
-    releasePublish: (version, code, url, notes, mandatory) => rpc('cj_release_publish', { p_token: tk(), p_version: version, p_code: code, p_url: url, p_notes: notes || '', p_mandatory: !!mandatory }),
+    releasePublish: (version, code, url, notes, mandatory, maxLag, minCode) => rpc('cj_release_publish', { p_token: tk(), p_version: version, p_code: code, p_url: url, p_notes: notes || '', p_mandatory: !!mandatory, p_max_lag: maxLag | 0, p_min_code: minCode | 0 }),
     uploadLog: (name, boxes, areas, routes) => rpc('cj_upload_log', { p_token: tk(), p_name: name, p_boxes: boxes | 0, p_areas: areas | 0, p_routes: routes | 0 }),
     uploadsList: () => rpc('cj_uploads_list', { p_token: tk() }),
     pull: (ts, u, limit) => rpc('cj_pull', { p_token: tk(), p_ts: ts, p_u: u, p_limit: limit || 200 }, 40000),

@@ -223,3 +223,8 @@ v3.33 - Selección múltiple, distritos, archivos y clic derecho
 v3.34 - Clic derecho más robusto: se captura sobre todo el mapa (también con Google en modo compatible o vectorial) y ya no se ignora en el primer segundo tras abrir la página.
 
 v3.35 - El aviso de actualización ya no se repite: "Más tarde" o "Descargar" recuerdan esa versión (se vuelve a avisar solo si publican otra, o si es obligatoria). El aviso muestra instalada vs publicada (nombre y número). "Buscar actualización" sigue mostrándola siempre.
+
+v3.36 - Actualización forzada (requiere 10_actualizacion_forzada.sql en Supabase)
+ - Al publicar: "Forzar si la app va N versiones atrasada" (0 = no) y "Número mínimo permitido" (0 = sin mínimo). Una app que cumpla la condición no puede cerrar el aviso (sin "Más tarde") hasta instalar la nueva. El atraso se mide por el número de versión: súbelo de 1 en 1.
+ - La actualización "obligatoria" ya no se puede cerrar tocando fuera del aviso.
+ - El aviso muestra instalada vs publicada con nombre y número.
