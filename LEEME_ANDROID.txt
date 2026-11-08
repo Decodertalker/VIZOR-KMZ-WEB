@@ -221,3 +221,5 @@ v3.33 - Selección múltiple, distritos, archivos y clic derecho
  - Mapa: clic derecho (o mantener pulsado en el teléfono) abre menú: cajas cercanas a ese punto, copiar coordenadas/enlace, Google Maps, Waze, medir, agregar caja (admin), y acciones sobre una caja o evaluación.
 
 v3.34 - Clic derecho más robusto: se captura sobre todo el mapa (también con Google en modo compatible o vectorial) y ya no se ignora en el primer segundo tras abrir la página.
+
+v3.35 - El aviso de actualización ya no se repite: "Más tarde" o "Descargar" recuerdan esa versión (se vuelve a avisar solo si publican otra, o si es obligatoria). El aviso muestra instalada vs publicada (nombre y número). "Buscar actualización" sigue mostrándola siempre.

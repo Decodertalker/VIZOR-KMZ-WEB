@@ -1190,7 +1190,7 @@
     if (installEv) items.push(['app', 'Instalar en el teléfono', 'Úsala como una app más', 'inst']);
     items.push(['map', 'Mapa de calles sin conexión', VEC ? 'Incluido · se activa solo cuando no hay internet' : 'No incluido en esta versión', 'vecinfo']);
     if (VEC && !NB && !S.vecSaved) items.push(['download', 'Descargar mapa de calles', 'Guarda el mapa de calles en este teléfono para usarlo sin internet', 'vecsave']);
-    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.34 · ' + esc((BASES[S.base] || {}).label || 'mapa') + '</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
+    const m = modal('<h3>Vizor G <small style="font-size:12px;color:var(--muted);font-weight:500">v3.35 · ' + esc((BASES[S.base] || {}).label || 'mapa') + '</small></h3><div class="kpis"><div class="stat"><small>Cajas</small><b>' + S.pts.length.toLocaleString('es') + '</b></div><div class="stat"><small>Nuevas</small><b>' + nNew + '</b></div><div class="stat"><small>Editadas</small><b>' + nEd + '</b></div></div>' +
       items.map(i => '<button class="menu-item" data-a="' + i[3] + '"><span class="mi">' + ic(i[0]) + '</span><div><b>' + i[1] + '</b><small>' + i[2] + '</small></div></button>').join(''));
     hydrate(m);
     m.onclick = async e => {
@@ -1218,7 +1218,7 @@
   }
 
   /* ---------- administrador principal · actualizaciones · KMZ subidos ---------- */
-  const APP_VER = '3.34', APP_CODE = 53;   // APP_CODE = versionCode de esta versión (igual que app/build.gradle)
+  const APP_VER = '3.35', APP_CODE = 54;   // APP_CODE = versionCode de esta versión (igual que app/build.gradle)
   // Enlaces de Google Drive -> descarga directa
   const driveDirect = u => { u = String(u || '').trim(); const m = u.match(/^https:\/\/(?:drive|docs)\.google\.com\/(?:file\/d\/|open\?(?:[^#]*&)?id=|uc\?(?:[^#]*&)?id=)([A-Za-z0-9_-]{10,})/); return m ? 'https://drive.usercontent.google.com/download?id=' + m[1] + '&export=download&confirm=t' : u; };
   window.__loginInfo = () => {
@@ -1233,7 +1233,7 @@
   const isNewer = r => verGt(r.version, instName()) || (!verGt(instName(), r.version) && r.code > instCode());
   const instName = () => { try { return NB && NB.versionName ? String(NB.versionName()) : APP_VER; } catch (e) { return APP_VER; } };
   const fdate = t => { try { return new Date(t).toLocaleString('es', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
-  let relSeen = '';
+  const RS = { get() { try { return localStorage.getItem('vz_relSeen') || ''; } catch (e) { return ''; } }, set(v) { try { localStorage.setItem('vz_relSeen', v); } catch (e) { } } };
   function updateModal(r, manual) {
     r = Object.assign({}, r, { url: driveDirect(r.url) });
     const m = modal('<h3>Nueva versión ' + esc(r.version) + '</h3><p class="lead">Tienes la ' + esc(instName()) + (r.mandatory ? ' · <b>actualización obligatoria</b>' : '') + '.</p>' +
@@ -1241,8 +1241,8 @@
       '<p class="lead">Se descargará el instalador. Al terminar, ábrelo y elige “Instalar”: se actualiza sobre la que ya tienes y no pierdes tus datos.</p>' +
       '<div class="btnrow">' + (r.mandatory ? '' : '<button class="btn" id="upX">Más tarde</button>') + '<button class="btn accent" id="upGo">' + ic('download') + 'Descargar e instalar</button></div>');
     hydrate(m);
-    const x = m.querySelector('#upX'); if (x) x.onclick = closeModal;
-    m.querySelector('#upGo').onclick = () => { openExt(r.url, r.url); if (!r.mandatory) closeModal(); };
+    const x = m.querySelector('#upX'); if (x) x.onclick = () => { RS.set(r.version + '|' + r.code); closeModal(); };
+    m.querySelector('#upGo').onclick = () => { RS.set(r.version + '|' + r.code); openExt(r.url, r.url); if (!r.mandatory) closeModal(); };
   }
   async function checkRelease(manual) {
     if (!Cloud.user() || !NB) return;
@@ -1250,8 +1250,8 @@
     const cur = instCode();
     if (!r || !isNewer(r)) { if (manual) { const m = modal('<h3>Estás al día</h3><p class="lead">Versión instalada: ' + esc(instName()) + (r ? ' (número ' + cur + ') · última publicada: ' + esc(r.version) + ' (número ' + r.code + ')' + '' : ' · el administrador aún no publicó actualizaciones') + '.</p><button class="btn wide" id="upOk">Cerrar</button>'); m.querySelector('#upOk').onclick = closeModal; } return; }
     const rk = r.version + '|' + r.code;
-    if (!manual && !r.mandatory && relSeen === rk) return;
-    relSeen = rk; updateModal(r, manual);
+    if (!manual && !r.mandatory && RS.get() === rk) return;
+    updateModal(r, manual);
   }
   setTimeout(() => checkRelease(false), 6000);
   setInterval(() => { if (!document.hidden) checkRelease(false); }, 10 * 60 * 1000);
